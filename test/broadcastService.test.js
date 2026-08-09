@@ -183,3 +183,41 @@ test('retryFailed creates a new job from failed targets', async () => {
   assert.equal(final.state, 'completed');
   assert.equal(final.successCount, 1);
 });
+
+test('2 numbers — transient error after the first send does not skip the second (user report)', async () => {
+  const sent = [];
+  const failOnce = new Set(['994514143432@s.whatsapp.net']);
+  wa.getSenderSocket = () => ({
+    sock: {
+      ws: { isOpen: true }, // socket açıqdır — xəta müvəqqətidir
+      sendMessage: async (jid) => {
+        sent.push(jid);
+        if (failOnce.has(jid)) {
+          failOnce.delete(jid); // ilk cəhddə müvəqqəti "Connection Closed", retry-da uğur
+          throw new Error('Connection Closed');
+        }
+        return {};
+      },
+      onWhatsApp: async (...ps) => ps.map((p) => ({ jid: `${p}@s.whatsapp.net`, exists: true })),
+    },
+    phone: '994501234567',
+  });
+
+  const job = broadcastService.createJob({
+    chatId: 'chat-exact',
+    type: 'text',
+    payloadSpec: { type: 'text', text: 'test mesajı' },
+    targets: [
+      { phone: '994503482690' },
+      { phone: '994514143432' },
+    ],
+  });
+  const final = await waitTerminal(job.id);
+  assert.equal(final.state, 'completed');
+  // Hər iki nömrəyə ayrıca cəhd olunub: 1-ci 1 cəhd, 2-ci müvəqqəti xətada 2 cəhd (retry)
+  assert.equal(sent.length, 3);
+  assert.ok(sent.includes('994503482690@s.whatsapp.net'));
+  assert.ok(sent.includes('994514143432@s.whatsapp.net'));
+  assert.equal(final.successCount, 2);
+  assert.equal(final.failCount, 0);
+});

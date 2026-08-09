@@ -78,7 +78,19 @@ curl -sL https://github.com/gashamorujov/WpFastMesenger-v5/raw/main/scripts/depl
    - xəta olan nömrə prosesi dayandırmır; sonda **📨 Yenidən göndər** və **🔁 Uğursuzları təkrar** düymələri;
    - bağlantı kəsilərsə və ya proses yenidən başladılarsa job **avtomatik bərpa olunur** (göndərilmişlər təkrarlanmır);
    - `.cc` və ya **🛑 Dayandır** işi ləğv edir — ləğv edilmiş iş bir daha bərpa olunmur;
-   - əməliyyat bitəndə sorğu/seçim/ara mərhələ bot mesajları avtomatik silinir — yalnız yekun nəticə mesajı qalır.
+   - əməliyyat bitəndə sorğu/seçim/ara mərhələ bot mesajları avtomatik silinir — yalnız yekun nəticə mesajı qalır;
+   - toplu göndəriş zamanı WhatsApp-dan gələn sorğular (cavablar) yadda saxlanılır və göndəriş **tamamilə bitəndən sonra** Telegram çatında ən aşağıda — bizim mesajımızın altında görünür (`WA_FORWARD_INCOMING` ilə söndürmək olar).
+
+## 📥 Gələn sorğular (WhatsApp → Telegram)
+
+Qoşulmuş WhatsApp hesabına gələn mesajlar avtomatik olaraq hesabın sahibi olan Telegram çatına əks olunur:
+
+- **Toplu göndəriş aktiv olmadıqda** — mesaj gələn kimi dərhal ötürülür;
+- **Toplu göndəriş aktiv olduqda** — gələn sorğular yaddaşda saxlanılır və göndəriş **tam bitəndən sonra** (yekun hesabatdan sonra) ardıcıl ötürülür. Beləliklə onlar həmişə bizim yazdığımız mesajın **aşağısında, ən aşağıda** görünür;
+- Öz göndərdiyimiz mesajlar (`fromMe`), status yeniləmələri, tarix sinxronizasiyası və protokol mesajları (reaksiya və s.) ötürülmür;
+- Mətn gələn kimi göstərilir; media (şəkil, video, səs, fayl və s.) növü və başlığı ilə bildirilir.
+
+Nəzarət: `WA_FORWARD_INCOMING=false` ilə söndürün.
 
 ## 🇦🇿 Azərbaycan nömrə formatları
 
@@ -114,6 +126,7 @@ Yanlış nömrələr üçün aydın Azərbaycan dilində xəta mesajı göstəri
 | `BROADCAST_DELAY_MAX_MS` | `7000` | Göndərişlər arası max gecikmə |
 | `BROADCAST_MAX_RETRIES` | `2` | Hər nömrə üçün retry sayı |
 | `DUPLICATE_SEND_TTL_MIN` | `10` | Təkrar göndərmə qoruyucusu (dəq.; `0` = söndür) |
+| `WA_FORWARD_INCOMING` | `true` | WhatsApp-dan gələn sorğuları sahib Telegram çatına ötür (`false`/`0` = söndür) |
 
 ## 📡 WhatsApp inteqrasiyası — məhdudiyyətlər
 

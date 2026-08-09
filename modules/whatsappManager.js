@@ -25,6 +25,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const { sleep } = require('../lib/myfunc');
 const { makeLogger } = require('./logger');
+const incoming = require('./incomingDispatcher');
 
 const LOG = makeLogger('WA');
 
@@ -140,6 +141,9 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
       syncFullHistory: true,
     });
 
+    // Gələn WhatsApp mesajları → sahib Telegram çatına (incomingDispatcher)
+    incoming.attach(sock, phone);
+
     let qrSent = false;
     let pairCodeSent = false;
     let connOpen = false;
@@ -181,8 +185,10 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
           name: sock.user?.name || phone,
           jid: sock.user?.id || '',
           method,
+          chatId: chatId || sessionsData[phone]?.chatId || null,
         };
         saveSessionsData();
+        incoming.setChat(phone, sessionsData[phone].chatId);
         activeConnections[phone] = sock;
         await say(bot, chatId, `✅ Connected!\n+${phone}\n${sock.user?.name || ''}`, { parse_mode: 'Markdown' });
         fireConnectedHooks(phone, sock);
@@ -197,6 +203,7 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
         if (code === DisconnectReason.loggedOut || code === 401) {
           delete sessionsData[phone];
           saveSessionsData();
+          incoming.removePhone(phone);
           try { fs.removeSync(dir); } catch {}
           await say(bot, chatId, `+${phone}: Logged out.`);
           return;
@@ -307,6 +314,7 @@ async function disconnectSession(phone) {
   try { fs.removeSync(sessDir(phone)); } catch {}
   delete sessionsData[phone];
   saveSessionsData();
+  incoming.removePhone(phone);
   return true;
 }
 

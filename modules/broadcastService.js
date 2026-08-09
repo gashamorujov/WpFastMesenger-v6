@@ -21,6 +21,7 @@ const path = require('path');
 const { Queue } = require('./queue');
 const jobStore = require('./jobStore');
 const recentSends = require('./recentSends');
+const incoming = require('./incomingDispatcher');
 const wa = require('./whatsappManager');
 const { broadcast, formatDuration, jidForPhone } = require('../lib/broadcast');
 const { getTelegramMessenger, sessionManager } = require('./services');
@@ -59,6 +60,9 @@ const globalQueue = new Queue({
     } finally {
       queuedJobIds.delete(jobId);
       lastProgressAt.delete(jobId);
+      // Broadcast bitdi → gələn sorğuları ən aşağıda ötür
+      const j = jobStore.read(jobId);
+      if (j && j.chatId) incoming.resume(j.chatId);
     }
   },
   delayMin: 2000,
@@ -349,6 +353,9 @@ function createJob(input) {
 function enqueueJob(jobId) {
   if (queuedJobIds.has(jobId)) return false;
   queuedJobIds.add(jobId);
+  // Broadcast aktivdir → gələn sorğular bitənə qədər saxlanılır
+  const j = jobStore.read(jobId);
+  if (j && j.chatId) incoming.pause(j.chatId);
   globalQueue.push(jobId).catch(() => {});
   return true;
 }
@@ -394,11 +401,16 @@ function cancelChatJobs(chatId) {
       cancelled++;
     }
   }
-  const removed = globalQueue.removeWhere((id) => {
+  const cancelledQueued = (globalQueue.items || []).filter((id) => {
     const j = jobStore.read(id);
     return j && String(j.chatId) === String(chatId) && j.state === 'cancelled';
   });
+  const removed = globalQueue.removeWhere((id) => cancelledQueued.includes(id));
   if (removed > 0) LOG.info(`Removed ${removed} queued job(s) for chat ${chatId}`);
+  for (const id of cancelledQueued) {
+    const j = jobStore.read(id);
+    if (j && j.chatId) incoming.resume(j.chatId);
+  }
   return cancelled;
 }
 

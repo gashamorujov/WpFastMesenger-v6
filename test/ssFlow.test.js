@@ -43,7 +43,7 @@ test.before(() => {
 test.after(() => {
   broadcastService.createJob = originalCreateJob;
   broadcastService.retryFailed = originalRetryFailed;
-  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9']) sessionManager.destroy(id);
+  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10']) sessionManager.destroy(id);
 });
 
 test('ss.start — numbers prompt + SS_NUMBERS state', async () => {
@@ -161,4 +161,19 @@ test('ss.handleAction — again re-enters content with previous numbers', async 
   assert.equal(s.state, STATES.SS_CONTENT);
   assert.equal(s.numbers.length, 1);
   assert.equal(s.numbers[0].phone, '994551234567');
+});
+
+test('ss.handle — exact user input (994503482690 / +994 51 414 34 32) → both numbers reach the job', async () => {
+  const chat = fakeChat();
+  await ss.start('c10', chat);
+  await ss.handle('c10', { text: '994503482690\n+994 51 414 34 32' }, '994503482690\n+994 51 414 34 32', chat, () => ({}));
+  const s = sessionManager.get('c10');
+  assert.equal(s.state, STATES.SS_CONTENT);
+  assert.equal(s.numbers.length, 2);
+  assert.deepEqual(s.numbers.map((n) => n.phone), ['994503482690', '994514143432']);
+
+  await ss.handle('c10', { text: 'test mesajı' }, 'test mesajı', chat, () => ({ type: 'text', payload: { text: 'test mesajı' } }));
+  await ss.handleAction('c10', 'send', chat);
+  assert.equal(lastJob.targets.length, 2);
+  assert.deepEqual(lastJob.targets.map((t) => t.phone), ['994503482690', '994514143432']);
 });

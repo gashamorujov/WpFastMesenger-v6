@@ -92,6 +92,7 @@ class SessionManager {
     s.ssQueue = null;
     s.flow = null;
     s.msgId = null;
+    s.ssMsgId = null; // köhnə flow/progress mesajı yeni flow tərəfindən redaktə olunmasın
     s.contacts.length = 0;
     s.numbers.length = 0;
     s.contentCount = 0;
