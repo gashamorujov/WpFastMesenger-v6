@@ -31,6 +31,7 @@ const contacts = require('../commands/contacts');
 const tgPayload = require('../lib/telegramPayload');
 const { MAIN_MENU_BUTTONS, CONNECTION_MENU_BUTTONS } = require('../lib/menu');
 const broadcastService = require('./broadcastService');
+const cleanup = require('./messageCleanup');
 
 const LOG = makeLogger('BOT');
 
@@ -396,6 +397,7 @@ async function routeMessage(msg) {
   // .cc — cancel the active process at ANY stage, anywhere (highest priority)
   if (cmd?.type === 'cc') {
     sessionManager.cancel(chatId);
+    await cleanup.deleteTracked(chatId);
     broadcastService.cancelChatJobs(chatId);
     await send('✅ Əməliyyat uğurla ləğv edildi.', { reply_markup: { inline_keyboard: MAIN_MENU_BUTTONS } });
     return;

@@ -24,6 +24,7 @@ const { STATES } = require('../modules/sessionManager');
 const { formatDuration } = require('../lib/broadcast');
 const { formatPhone } = require('../lib/azPhone');
 const { MAIN_MENU_BUTTONS } = require('../lib/menu');
+const cleanup = require('../modules/messageCleanup');
 
 const TEMPLATE =
   'Əlavə etmək istədiyiniz kontaktları aşağıdakı formada göndərin.\n\n' +
@@ -48,7 +49,10 @@ async function start(chatId, send) {
   s.contacts = [];
   sessionManager.touch(chatId);
 
-  if (send) await send(TEMPLATE);
+  if (send) {
+    const sent = await send(TEMPLATE);
+    cleanup.track(chatId, sent?.message_id);
+  }
 }
 
 async function ensureQueue(chatId, send) {
@@ -152,6 +156,9 @@ async function sendReport(chatId, send) {
   lines.push('', `📒 Daxili bazada ümumi kontakt: ${contactStore.count()}`);
 
   await send(lines.join('\n'), { reply_markup: { inline_keyboard: MAIN_MENU_BUTTONS } });
+
+  // Əməliyyat bitdi — sorğu və ara mərhələ mesajlarını avtomatik sil
+  await cleanup.deleteTracked(chatId);
 }
 
 /**
@@ -203,12 +210,14 @@ async function handle(chatId, text, send) {
       lines.push('⚠️ Nömrə tapılmadı. Format: Ad Soyad + nömrə.');
     }
     lines.push('', 'Düzəliş edib yenidən göndərin və ya .cc ilə ləğv edin.');
-    await send(lines.join('\n'));
+    const ackErr = await send(lines.join('\n'));
+    cleanup.track(chatId, ackErr?.message_id);
     return true;
   }
 
   lines.push('', `Növbədə: ${s.contacts.length} kontakt. Ardıcıl emal başlayır...`);
-  await send(lines.join('\n'));
+  const ack = await send(lines.join('\n'));
+  cleanup.track(chatId, ack?.message_id);
 
   // Enqueue — the queue worker processes one contact at a time
   const queue = await ensureQueue(chatId, send);

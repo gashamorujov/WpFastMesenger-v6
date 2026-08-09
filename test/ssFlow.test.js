@@ -43,7 +43,7 @@ test.before(() => {
 test.after(() => {
   broadcastService.createJob = originalCreateJob;
   broadcastService.retryFailed = originalRetryFailed;
-  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8']) sessionManager.destroy(id);
+  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9']) sessionManager.destroy(id);
 });
 
 test('ss.start — numbers prompt + SS_NUMBERS state', async () => {
@@ -135,7 +135,16 @@ test('ss.handleAction — retry starts a fresh progress message', async () => {
   const last = chat.sent[chat.sent.length - 1];
   assert.match(last.text, /Yenidən göndərilir/);
   const labels = last.opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
-  assert.ok(labels.includes('🛑 Dayandır'));
+  assert.ok(labels.some((l) => l.includes('🛑')));
+});
+
+test('ss.handleAction — stop cancels and resets the session', async () => {
+  const chat = fakeChat();
+  await ss.start('c9', chat);
+  const ok = await ss.handleAction('c9', 'stop', chat);
+  assert.equal(ok, true);
+  assert.equal(sessionManager.get('c9').state, STATES.IDLE);
+  assert.equal(sessionManager.get('c9').numbers.length, 0);
 });
 
 test('ss.handleAction — again re-enters content with previous numbers', async () => {

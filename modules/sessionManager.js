@@ -98,7 +98,9 @@ class SessionManager {
     s.pendingPayload = null;
     s.jobId = null;
     s.ctPhone = null;
-    s.botMsgs.length = 0;
+
+    // botMsgs qəsdən təmizlənmir: köhnə bot mesajlarının silinməsi
+    // collectBotMsgs() ilə (mesajlar silindikdən sonra) həyata keçirilir.
 
     this.clearTempFiles(chatId);
 
@@ -133,6 +135,20 @@ class SessionManager {
     }
     s.tempFiles.length = 0;
   }
+  /**
+   * Return and clear all tracked bot message ids (prompt / intermediate
+   * messages). The caller deletes them after the operation completes.
+   * @param {string} chatId
+   * @returns {number[]}
+   */
+  collectBotMsgs(chatId) {
+    const s = this.sessions.get(chatId);
+    if (!s) return [];
+    const ids = s.botMsgs.slice();
+    s.botMsgs.length = 0;
+    return ids;
+  }
+
   /** Drop the session entirely (frees memory). */
   destroy(chatId) {
     const s = this.sessions.get(chatId);

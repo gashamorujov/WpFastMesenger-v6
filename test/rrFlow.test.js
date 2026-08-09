@@ -3,7 +3,7 @@ isolateDataDir('rrflow');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sessionManager } = require('../modules/services');
+const { sessionManager, setTelegramMessenger } = require('../modules/services');
 const { STATES } = require('../modules/sessionManager');
 const contactStore = require('../modules/contactStore');
 const wa = require('../modules/whatsappManager');
@@ -11,9 +11,15 @@ const waPresence = require('../modules/waPresence');
 const rr = require('../commands/rr');
 const { sleep } = require('../lib/myfunc');
 
+const deleted = [];
+
 test.before(() => {
   contactStore._reset();
   waPresence._resetCache();
+  deleted.length = 0;
+  setTelegramMessenger({
+    deleteMessage: async (chatId, msgId) => { deleted.push(msgId); },
+  });
   wa.getSenderSocket = () => ({
     sock: {
       onWhatsApp: async (p) => [{ jid: `${p}@s.whatsapp.net`, exists: true }],
@@ -21,6 +27,11 @@ test.before(() => {
     },
     phone: '994501234567',
   });
+});
+
+test.after(() => {
+  setTelegramMessenger(null);
+  sessionManager.destroy('rrchat');
 });
 
 test.after(() => {
@@ -46,6 +57,9 @@ test('full .rr flow: parse → queue → WhatsApp sync → report', async () => 
   assert.equal(contactStore.count(), 2);
   const report = sent.find((s) => s.text.includes('Kontakt emalı tamamlandı')).text;
   assert.match(report, /WhatsApp kontaktlarına əlavə edildi: 2/);
+
+  // Ara mərhələ mesajları (template + ack) avtomatik silinir, hesabat qalır
+  assert.deepEqual(deleted.sort((a, b) => a - b), [1, 2]); // template(id1) + ack(id2); report(id3) saxlanılır
 
   // duplicate phone with different name → updated, count stays 2
   contactStore._reset();

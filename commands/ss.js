@@ -24,7 +24,8 @@ const contactStore = require('../modules/contactStore');
 const recentSends = require('../modules/recentSends');
 const broadcastService = require('../modules/broadcastService');
 const { specFromBuilt } = require('../lib/telegramPayload');
-const { formatPhone } = require('../lib/azPhone');
+const { formatPhone, toLocal } = require('../lib/azPhone');
+const cleanup = require('../modules/messageCleanup');
 const { SS_CONFIRM_BUTTONS, SS_STOP_BUTTONS, MENU_BUTTON } = require('../lib/menu');
 const wa = require('../modules/whatsappManager');
 const { makeLogger } = require('../modules/logger');
@@ -86,6 +87,7 @@ async function editFlow(chatId, ctx, text, keyboard) {
  */
 async function start(chatId, ctx) {
   sessionManager.cancel(chatId);
+  await cleanup.deleteTracked(chatId);
   const s = sessionManager.get(chatId);
   s.state = STATES.SS_NUMBERS;
   s.aborted = false;
@@ -95,18 +97,31 @@ async function start(chatId, ctx) {
   await editFlow(chatId, ctx, NUMBERS_PROMPT);
 }
 
+/**
+ * Nömrələri alt-alta göstər: 0501234567 / 0551234567 / 0771234567 …
+ * @param {string[]} phones — normalizə edilmiş (994…) nömrələr
+ * @param {number} max — göstərilən maksimum say (qalanı "və daha N" olur)
+ */
+function numberLines(phones, max = 30) {
+  const lines = phones.map((p) => toLocal(p) || p);
+  if (lines.length > max) {
+    return [...lines.slice(0, max), `...və daha ${lines.length - max} nömrə`];
+  }
+  return lines;
+}
+
 function numbersReport(numbers, duplicates, invalid, recent) {
-  const lines = [`✔ ${numbers.length} nömrə qəbul edildi.`];
+  const lines = [`✔ ${numbers.length} nömrə qəbul edildi:`, '', ...numberLines(numbers)];
   if (duplicates.length > 0) {
-    lines.push(`🔁 ${duplicates.length} duplicate atlandı.`);
+    lines.push('', `🔁 ${duplicates.length} duplicate atlandı.`);
   }
   if (invalid.length > 0) {
-    lines.push(`⚠️ ${invalid.length} yanlış:`);
+    lines.push('', `⚠️ ${invalid.length} yanlış:`);
     for (const i of invalid.slice(0, 5)) lines.push(`• ${i}`);
     if (invalid.length > 5) lines.push(`...və daha ${invalid.length - 5}`);
   }
   if (recent.length > 0) {
-    lines.push(`⚠️ ${recent.length} yaxın vaxtda göndərilib (avtomatik atlanacaq):`);
+    lines.push('', `⚠️ ${recent.length} yaxın vaxtda göndərilib (avtomatik atlanacaq):`);
     for (const r of recent.slice(0, 3)) lines.push(`• ${formatPhone(r)}`);
     if (recent.length > 3) lines.push(`...və daha ${recent.length - 3}`);
   }
@@ -120,7 +135,8 @@ async function showConfirm(chatId, ctx) {
   const { built } = s.pendingPayload;
   const text =
     `📨 Hazırdır\n\n` +
-    `👥 ${s.numbers.length} nömrə\n` +
+    `👥 ${s.numbers.length} nömrə:\n\n` +
+    `${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n` +
     `💬 ${previewText(built)}`;
   await editFlow(chatId, ctx, text, SS_CONFIRM_BUTTONS);
 }
@@ -152,7 +168,7 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
 
     const recent = fresh.filter((n) => recentSends.isRecent(n));
     s.state = STATES.SS_CONTENT;
-    await editFlow(chatId, ctx, numbersReport(s.numbers.length, duplicates, invalid, recent));
+    await editFlow(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
     return true;
   }
 
@@ -164,9 +180,9 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
     for (const n of fresh) s.numbers.push({ phone: n, name: null });
     const recent = fresh.filter((n) => recentSends.isRecent(n));
     if (fresh.length === 0) {
-      await editFlow(chatId, ctx, `🔁 Yeni nömrə əlavə olunmadı (hamısı mövcuddur).\n\n👥 ${s.numbers.length} nömrə\n\n${CONTENT_PROMPT}`);
+      await editFlow(chatId, ctx, `🔁 Yeni nömrə əlavə olunmadı (hamısı mövcuddur).\n\n👥 ${s.numbers.length} nömrə:\n\n${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n${CONTENT_PROMPT}`);
     } else {
-      await editFlow(chatId, ctx, numbersReport(s.numbers.length, duplicates, invalid, recent));
+      await editFlow(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
     }
     return true;
   }
@@ -243,6 +259,8 @@ async function handleAction(chatId, action, ctx) {
       return true;
     }
     s.jobId = job.id;
+    // Təsdiq mesajı dərhal canlı progressə çevrilir: 🛑 Dayandır tam genişlikdə
+    await editFlow(chatId, ctx, '🚀 Göndəriş başladı…\n\n📨 İş növbəyə alındı və davam edir.', SS_STOP_BUTTONS);
     // Numbers stay for potential retry; session flow is done.
     sessionManager.reset(chatId);
     return true;
@@ -259,6 +277,7 @@ async function handleAction(chatId, action, ctx) {
     // 🛑 Dayandır — cancel the active broadcast for this chat
     broadcastService.cancelChatJobs(chatId);
     sessionManager.cancel(chatId);
+    await cleanup.deleteTracked(chatId);
     return true;
   }
 

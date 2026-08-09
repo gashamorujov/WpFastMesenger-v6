@@ -25,7 +25,7 @@ curl -sL https://github.com/gashamorujov/WpFastMesenger-v5/raw/main/scripts/depl
 
 | Əmr | Funksiya |
 |---|---|
-| `/start` | Banner + əsas menyu (📒 Kontaktlar • 📨 Toplu Mesaj • 📲 Qoşul • 🔄 Reconnect • 🛑 Dayandır) |
+| `/start` | Banner + əsas menyu (📒 Kontaktlar • 📇 Kontakt Əlavə Et • 📨 Toplu Mesaj • 📲 Qoşul) |
 | `.gg` / `/qeydiyyat` | WhatsApp-a qoşulma (🔐 Pair Code), 🔄 Reconnect, 🚪 Çıxış |
 | `.rr` | Kontakt əlavə etmə (WhatsApp kontaktlarına) |
 | `.ss` | Toplu mesaj göndərmə (nömrələr → mesaj → təsdiq → 🚀 Göndər) |
@@ -67,17 +67,18 @@ curl -sL https://github.com/gashamorujov/WpFastMesenger-v5/raw/main/scripts/depl
 1. `.ss` yazın → **📱 Nömrələri göndər**.
 2. Nömrələri istənilən ayırıcı ilə yazın: sətir, vergül, nöqtəli vergül, boşluq — hamısı dəstəklənir. Duplicate-lər və yanlış formatlar avtomatik bildirilir (yalnız Azərbaycan mobil nömrələri).
 3. Mesajı göndərin: mətn, şəkil, video, səs, stiker, GIF, fayl, PDF, caption-lı media — format dəyişdirilmir. Bu mərhələdə yenidən nömrə yazsanız siyahıya **əlavə olunur**.
-4. Təsdiq ekranı: **📨 Hazırdır** → **[🚀 Göndər] [✖️ Geri]**. Eyni mesaj canlı progress olur və **🛑 Dayandır** düyməsi daşıyır.
+4. Təsdiq ekranı: **📨 Hazırdır** (nömrələr alt-alta) → **[🚀 Göndər]** tam genişlikdə, altında **[✖️ Geri]**. Göndərmə başlayan kimi eyni mesaj canlı progress olur və tam genişlikdə **🛑 Göndərişi Dayandır** düyməsi görünür (yalnız aktiv göndəriş zamanı).
 5. Göndəriş **persistent job** kimi işləyir (`data/jobs/`):
    - ardıcıl (queue), təsadüfi gecikmələrlə (WhatsApp limitlərinə uyğun);
    - hər nömrə üçün status: `göndərildi / xəta / atlandı / gözləyir`;
-   - canlı **progress** — eyni Telegram mesajı yenilənir, **🛑 Dayandır** düyməsi iş bitdikdə avtomatik silinir;
+   - canlı **progress** — eyni Telegram mesajı yenilənir; **🛑 Dayandır** yalnız göndəriş aktiv olduqda görünür və iş bitdikdə avtomatik silinir;
    - server **ACK** izlənməsi — hesabatda "📨 WhatsApp tərəfindən qəbul edildi" sayı;
    - **WhatsApp-da olmayan nömrələr** əvvəlcədən yoxlanılır və atlanır (göndərməyə cəhd edilmir);
    - eyni nömrəyə təkrar göndərmə qoruyucusu (`DUPLICATE_SEND_TTL_MIN`);
    - xəta olan nömrə prosesi dayandırmır; sonda **📨 Yenidən göndər** və **🔁 Uğursuzları təkrar** düymələri;
    - bağlantı kəsilərsə və ya proses yenidən başladılarsa job **avtomatik bərpa olunur** (göndərilmişlər təkrarlanmır);
-   - `.cc` və ya **🛑 Dayandır** işi ləğv edir — ləğv edilmiş iş bir daha bərpa olunmur.
+   - `.cc` və ya **🛑 Dayandır** işi ləğv edir — ləğv edilmiş iş bir daha bərpa olunmur;
+   - əməliyyat bitəndə sorğu/seçim/ara mərhələ bot mesajları avtomatik silinir — yalnız yekun nəticə mesajı qalır.
 
 ## 🇦🇿 Azərbaycan nömrə formatları
 
