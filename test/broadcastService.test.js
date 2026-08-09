@@ -121,6 +121,40 @@ test('cancelChatJobs cancels active jobs', async () => {
   assert.equal(final.state, 'cancelled');
 });
 
+test('one transient error does not stop the job — all targets attempted', async () => {
+  const sent = [];
+  wa.getSenderSocket = () => ({
+    sock: {
+      ws: { isOpen: true }, // socket açıqdır — "Connection Closed" müvəqqəti xətadır
+      sendMessage: async (jid) => {
+        sent.push(jid);
+        if (jid === '994551234567@s.whatsapp.net') throw new Error('Connection Closed'); // müvəqqəti blip
+        return {};
+      },
+      onWhatsApp: async (...ps) => ps.map((p) => ({ jid: `${p}@s.whatsapp.net`, exists: true })),
+    },
+    phone: '994501234567',
+  });
+
+  const job = broadcastService.createJob({
+    chatId: 'chat-tx',
+    type: 'text',
+    payloadSpec: { type: 'text', text: 'salam' },
+    targets: [
+      { phone: '994501234567' },
+      { phone: '994551234567' },
+      { phone: '994701234567' },
+    ],
+  });
+  const final = await waitTerminal(job.id);
+  assert.equal(final.state, 'completed'); // interrupted DEYİL — loop dayanmadı
+  assert.equal(final.successCount, 2);
+  assert.equal(final.failCount, 1);
+  // Bütün nömrələrə cəhd olundu: 1 + (2-ci: 2 cəhd) + 1 = 4
+  assert.equal(sent.length, 4);
+  assert.ok(sent.includes('994701234567@s.whatsapp.net'));
+});
+
 test('retryFailed creates a new job from failed targets', async () => {
   const old = jobStore.create({
     chatId: 'chat7',

@@ -96,3 +96,20 @@ test('extractNumbers — invalid chunks reported', () => {
   assert.deepEqual(numbers, ['994501234567']);
   assert.ok(invalid.length >= 1);
 });
+
+test('extractNumbers — user report formats (multi-line, mixed)', () => {
+  const { numbers } = extractNumbers('994503482690\n+994 51 414 34 32');
+  assert.deepEqual(numbers, ['994503482690', '994514143432']);
+});
+
+test('extractNumbers — same number in different formats is deduplicated', () => {
+  const { numbers, duplicates } = extractNumbers('994503482690\n+994 50 348 26 90\n0503482690');
+  assert.deepEqual(numbers, ['994503482690']);
+  assert.ok(duplicates.length >= 1);
+});
+
+test('extractNumbers — arbitrary number of lines accepted', () => {
+  const lines = Array.from({ length: 50 }, (_, i) => `050${String(1000000 + i)}`);
+  const { numbers } = extractNumbers(lines.join('\n'));
+  assert.equal(numbers.length, 50);
+});

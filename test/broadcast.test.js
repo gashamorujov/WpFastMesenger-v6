@@ -94,12 +94,58 @@ test('broadcast — cancellation stops between items', async () => {
   assert.equal(report.success, 1);
 });
 
-test('broadcast — connection loss interrupts the loop', async () => {
+test('broadcast — real connection loss (socket closed) interrupts the loop', async () => {
   const sock = makeSock({ connectionLost: new Set([jidForPhone('994551234567')]) });
+  sock.ws = { isOpen: false }; // WebSocket həqiqətən qapalı
   const report = await broadcast(sock, targets(['994501234567', '994551234567', '994701234567']), { text: 'hi' }, { delayMinMs: 2, delayMaxMs: 2 });
   assert.equal(report.interrupted, true);
   assert.equal(report.fail, 1);
   assert.equal(report.failed[0].phone, '994551234567');
+  assert.equal(sock.calls.length, 2); // 3-cü nömrəyə cəhd edilmir (socket ölüdür)
+});
+
+test('broadcast — transient "Connection Closed" while socket is open does NOT stop the loop', async () => {
+  const sock = makeSock({ connectionLost: new Set([jidForPhone('994551234567')]) });
+  sock.ws = { isOpen: true }; // müvəqqəti xəta — socket açıqdır
+  const report = await broadcast(sock, targets(['994501234567', '994551234567', '994701234567']), { text: 'hi' }, {
+    delayMinMs: 2,
+    delayMaxMs: 2,
+    maxRetries: 1,
+  });
+  assert.equal(report.interrupted, false);
+  assert.equal(report.success, 2); // 1-ci və 3-cü göndərildi
+  assert.equal(report.fail, 1); // 2-ci uğursuz, amma loop dayanmadı
+  // Bütün nömrələrə cəhd olundu: 1 + (2-ci: 2 cəhd) + 1 = 4
+  assert.equal(sock.calls.length, 4);
+  assert.ok(sock.calls.some((c) => c.jid === jidForPhone('994701234567')));
+});
+
+test('broadcast — server error receipt (status ERROR) counts as failed, others continue', async () => {
+  const handlers = {};
+  const sock = makeSock();
+  sock.ev = { on: (ev, cb) => { handlers[ev] = cb; }, off: () => {} };
+  const origSend = sock.sendMessage;
+  let callNo = 0;
+  sock.sendMessage = async (jid) => {
+    callNo++;
+    const msgId = `err-${jid}`;
+    if (callNo === 2) {
+      // server bu mesajı rədd edir (nömrə qeydiyyatda deyil)
+      setTimeout(() => handlers['messages.update']?.([{ key: { id: msgId }, status: 0 }]), 2);
+    }
+    return { key: { id: msgId } };
+  };
+  const report = await broadcast(sock, targets(['994501234567', '994551234567', '994701234567']), { text: 'hi' }, {
+    ackTracking: true,
+    ackTimeoutMs: 300,
+    delayMinMs: 2,
+    delayMaxMs: 2,
+  });
+  assert.equal(report.interrupted, false);
+  assert.equal(report.success, 2);
+  assert.equal(report.fail, 1);
+  assert.equal(report.failed[0].phone, '994551234567');
+  sock.sendMessage = origSend;
 });
 
 test('broadcast — progress callbacks report per-target status', async () => {
