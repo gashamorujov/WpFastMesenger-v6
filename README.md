@@ -12,7 +12,7 @@ New Project → Deploy from GitHub → `gashamorujov/WpFastMesenger`
 Tələb olunan environment dəyişənləri:
 | Dəyişən | Məcburi | İzah |
 |---|---|---|
-| `TELEGRAM_TOKEN` | ✅ | Telegram bot tokeni (BotFather) |
+| `TELEGRAM_TOKEN` | ❌ | Telegram bot tokeni — proyektə əlavə edilib, deploy üçün lazım deyil (env dəyişəni üstünlük təşkil edir) |
 | `PORT` | ❌ | HTTP health server portu (default 3000) |
 | `PAIR_NUMBER` | ❌ | İlk açılışda avtomatik qoşulacaq nömrə |
 
@@ -88,7 +88,7 @@ Yanlış nömrələr üçün aydın Azərbaycan dilində xəta mesajı göstəri
 
 ## 🔐 İcazələr / tələblər
 
-- `TELEGRAM_TOKEN` — Telegram bot tokeni (məcburi).
+- `TELEGRAM_TOKEN` — Telegram bot tokeni proyektə əlavə edilib, **deploy üçün konfiqurasiya tələb olunmur**. Env dəyişəni ilə dəyişdirmək istəsəniz: `TELEGRAM_TOKEN=...`.
 - WhatsApp nömrəsinin **Pair Code** ilə qoşulması — rəsmi WhatsApp → Linked Devices → Link with phone number (kod yalnız 5 dəqiqə etibarlıdır).
 - Fayl sisteminə yazma: `sessions/` (auth state), `data/` (kontaktlar, job-lar, son göndərişlər), `temp/` (media keşi).
 - Android permission-lar bu arxitekturada tətbiq edilmir (cihaz kodu işləmir) — tətbiq server tərəfdə işləyir.
@@ -97,7 +97,7 @@ Yanlış nömrələr üçün aydın Azərbaycan dilində xəta mesajı göstəri
 
 | Dəyişən | Default | İzah |
 |---|---|---|
-| `TELEGRAM_TOKEN` | — | Telegram bot tokeni (məcburi, hardcoded yoxdur) |
+| `TELEGRAM_TOKEN` | daxili default | Telegram bot tokeni (proyektə əlavə olunub; env ilə override etmək olar) |
 | `WA_PRESENCE_CHECK` | `true` | WhatsApp qeydiyyat yoxlaması (USync) |
 | `WA_SKIP_UNREGISTERED` | `true` | Qeydiyyatda olmayan nömrələri atla |
 | `BROADCAST_DELAY_MIN_MS` | `3000` | Göndərişlər arası min gecikmə |
@@ -118,7 +118,7 @@ Yanlış nömrələr üçün aydın Azərbaycan dilində xəta mesajı göstəri
 ```bash
 npm install
 npm test          # 57 unit test (phone, contact store/service, broadcast, queue, jobs, picker, ss flow, payload)
-npm start         # TELEGRAM_TOKEN tələb olunur
+npm start         # token proyektə əlavə olunub — heç bir env tələb olunmur
 ```
 
 Sağlamlıq yoxlaması: `GET /health` → `{ status, telegram, whatsapp, sha, uptime }`.

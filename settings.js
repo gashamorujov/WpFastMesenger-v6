@@ -1,8 +1,11 @@
 /**
- * Central configuration. All secrets come from the environment only
- * (TELEGRAM_TOKEN is required; there is no hardcoded fallback).
+ * Central configuration.
+ *
+ * TELEGRAM_TOKEN: env dəyişəni üstünlük təşkil edir; göstərilməyibsə
+ * proyektə əlavə edilmiş default bot tokeni istifadə olunur — beləliklə
+ * deploy üçün heç bir konfiqurasiya tələb olunmur.
  */
-const token = process.env.TELEGRAM_TOKEN || '';
+const token = process.env.TELEGRAM_TOKEN || '8632481071:AAElWXsJv_htHYRdt1o2QBqWFOl6oRE2NOY';
 
 function intEnv(name, fallback) {
   const v = parseInt(process.env[name], 10);
