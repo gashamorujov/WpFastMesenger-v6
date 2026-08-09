@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  whatsapp-bot:
+    build: .
+    container_name: whatsapp-bulk-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Bind-mount source so auto-update (git pull) works in realtime
+      - .:/app
+      - /app/node_modules
+      - ./sessions:/app/sessions
+      - ./temp:/app/temp
+      - ./data:/app/data
