@@ -10,7 +10,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const { makeLogger } = require('./logger');
-const { normalizePhone, cleanName } = require('../lib/phone');
+const { normalizePhone, cleanName, validateName } = require('../lib/phone');
 
 const LOG = makeLogger('CONTACT-STORE');
 
@@ -145,6 +145,35 @@ function remove(phone) {
   return false;
 }
 
+/**
+ * Change a contact's phone number. Rejects when the new number is invalid
+ * or already used by ANOTHER contact (duplicate prevention).
+ * @param {string} oldPhone — any format
+ * @param {string} newPhone — any format
+ * @returns {{ok: boolean, reason?: string, contact?: object}}
+ */
+function changePhone(oldPhone, newPhone) {
+  const oldP = normalizePhone(oldPhone);
+  const newP = normalizePhone(newPhone);
+  if (!oldP || !newP) return { ok: false, reason: 'Yanlış nömrə formatı' };
+  load();
+  const idx = contacts.findIndex((c) => c.phone === oldP);
+  if (idx === -1) return { ok: false, reason: 'Kontakt tapılmadı' };
+  const conflict = contacts.find((c) => c.phone === newP);
+  if (conflict) return { ok: false, reason: `Bu nömrə artıq "${conflict.name}" kontaktında mövcuddur (duplicate icazə verilmir)` };
+  contacts[idx].phone = newP;
+  contacts[idx].updatedAt = new Date().toISOString();
+  persistSoon();
+  return { ok: true, contact: contacts[idx] };
+}
+
+/** Update a contact's name (empty/invalid rejected). */
+function updateName(phone, name) {
+  const check = validateName(name);
+  if (!check.ok) return { ok: false, reason: check.reason };
+  return upsert({ phone, name: check.name });
+}
+
 /** Reset store (used by tests). */
 function _reset() {
   contacts = [];
@@ -153,4 +182,4 @@ function _reset() {
   try { fs.removeSync(FILE); } catch {}
 }
 
-module.exports = { upsert, get, list, count, search, remove, setWaStatus, _reset };
+module.exports = { upsert, get, list, count, search, remove, setWaStatus, changePhone, updateName, _reset };

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizePhone, isValidAzerbaijanMobile, parseContacts, parseNumbers, validateName, cleanName, formatPhone } = require('../lib/phone');
+const { normalizePhone, isValidAzerbaijanMobile, parseContacts, parseNumbers, extractNumbers, validateName, cleanName, formatPhone } = require('../lib/phone');
 const az = require('../lib/azPhone');
 
 test('normalizePhone — all supported Azerbaijani formats', () => {
@@ -76,4 +76,23 @@ test('parseNumbers — mixed formats normalized and deduped by caller', () => {
   const { numbers, errors } = parseNumbers('0501234567\n+994551234567\n994 70 123 45 67\n0123456789\n');
   assert.deepEqual(numbers, ['994501234567', '994551234567', '994701234567']);
   assert.equal(errors.length, 1);
+});
+
+test('extractNumbers — arbitrary separators (lines, commas, spaces)', () => {
+  const { numbers, invalid, duplicates } = extractNumbers('0501234567, 055 987 65 43\n+994701234567; 077-364-86-48  050 123 45 67');
+  assert.deepEqual(numbers, ['994501234567', '994559876543', '994701234567', '994773648648']);
+  assert.equal(invalid.length, 0);
+  assert.ok(duplicates.length >= 1); // 0501234567 written twice
+});
+
+test('extractNumbers — digit runs pulled from mixed text', () => {
+  const { numbers, invalid } = extractNumbers('Nömrəm: 0501234567, digəri 0559876543');
+  assert.deepEqual(numbers, ['994501234567', '994559876543']);
+  assert.equal(invalid.length, 0);
+});
+
+test('extractNumbers — invalid chunks reported', () => {
+  const { numbers, invalid } = extractNumbers('0501234567\nsalam\n0123456789');
+  assert.deepEqual(numbers, ['994501234567']);
+  assert.ok(invalid.length >= 1);
 });

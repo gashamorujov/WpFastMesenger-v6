@@ -27,6 +27,7 @@ const wa = require('./whatsappManager');
 const { sleep } = require('../lib/myfunc');
 const rr = require('../commands/rr');
 const ss = require('../commands/ss');
+const contacts = require('../commands/contacts');
 const tgPayload = require('../lib/telegramPayload');
 const { MAIN_MENU_BUTTONS, CONNECTION_MENU_BUTTONS } = require('../lib/menu');
 const broadcastService = require('./broadcastService');
@@ -147,6 +148,7 @@ function buildMessenger(instance) {
       instance.editMessageText(text, { chat_id: chatId, message_id: messageId }),
     editMessage: (chatId, messageId, text, opts) =>
       instance.editMessageText(text, { chat_id: chatId, message_id: messageId, ...(opts || {}) }),
+    deleteMessage: (chatId, messageId) => instance.deleteMessage(chatId, messageId),
     downloadFile: async (fileId) => {
       const file = await instance.getFile(fileId);
       if (!file?.file_path) throw new Error('Telegram file path unavailable');
@@ -243,17 +245,26 @@ async function handleCallback(query) {
     return;
   }
 
-  // Contact-picker / bulk-message job callbacks (namespace `sp:`)
+  const ctx = callbackCtx(chatId, messageId);
+
+  // Bulk-message job callbacks (namespace `sp:`: send / back / stop / retry)
   if (data.startsWith('sp:')) {
     const action = data.slice(3);
-    const messenger = getTelegramMessenger();
-    const edit = messenger
-      ? (cid, mid, text, opts) => messenger.editMessage(cid, mid, text, opts || {})
-      : null;
     try {
-      await ss.pickerAction(chatId, action, sendText, edit);
+      await ss.handleAction(chatId, action, ctx);
     } catch (e) {
-      LOG.error('Picker callback error:', e.message);
+      LOG.error('SS callback error:', e.message);
+    }
+    return;
+  }
+
+  // Contact browser callbacks (namespace `ct:`: view / rename / num / del / page / back)
+  if (data.startsWith('ct:')) {
+    const action = data.slice(3);
+    try {
+      await contacts.handleAction(chatId, action, ctx);
+    } catch (e) {
+      LOG.error('Contacts callback error:', e.message);
     }
     return;
   }
@@ -264,6 +275,20 @@ async function handleCallback(query) {
     text: data,
     from: query.from,
   });
+}
+
+/**
+ * Transport ctx for callback queries: send / edit the tapped message /
+ * deleteMsg, with the tapped message's id.
+ */
+function callbackCtx(chatId, messageId) {
+  const messenger = getTelegramMessenger();
+  return {
+    messageId,
+    send: (text, opts) => sendText(chatId, text, opts),
+    edit: (text, opts) => messenger.editMessage(chatId, messageId, text, opts || {}),
+    deleteMsg: (cid, mid) => messenger.deleteMessage(cid, mid),
+  };
 }
 
 /** Show a button layout on the given message; fall back to a new message. */
@@ -355,6 +380,18 @@ async function routeMessage(msg) {
   const send = (replyText, opts) => sendText(chatId, replyText, opts);
   const messenger = getTelegramMessenger();
   const buildPayload = (m) => tgPayload.buildPayload(m, messenger?.downloadFile);
+  const isCb = String(msg.message_id || '').startsWith('cb:');
+  const realMessageId = isCb ? null : msg.message_id || null;
+  const edit = messenger
+    ? (text, opts) => {
+        const flowMsgId = s.ctMsgId || s.ssMsgId || null;
+        const target = flowMsgId || realMessageId;
+        if (!target) return Promise.reject(new Error('no message to edit'));
+        return messenger.editMessage(chatId, target, text, opts || {});
+      }
+    : null;
+  const deleteMsg = messenger ? (cid, mid) => messenger.deleteMessage(cid, mid) : null;
+  const ctx = { send, edit, deleteMsg, messageId: realMessageId };
 
   // .cc — cancel the active process at ANY stage, anywhere (highest priority)
   if (cmd?.type === 'cc') {
@@ -387,7 +424,7 @@ async function routeMessage(msg) {
   }
 
   if (cmd?.type === 'ss') {
-    await ss.start(chatId, send, cmd.arg);
+    await ss.start(chatId, ctx, cmd.arg);
     return;
   }
 
@@ -403,7 +440,11 @@ async function routeMessage(msg) {
     return;
   }
   if (s.state === STATES.SS_NUMBERS || s.state === STATES.SS_CONTENT) {
-    await ss.handle(chatId, msg, text, send, buildPayload);
+    await ss.handle(chatId, msg, text, ctx, buildPayload);
+    return;
+  }
+  if (s.state === STATES.CT_RENAME || s.state === STATES.CT_NUMBER) {
+    await contacts.handleText(chatId, text, ctx);
     return;
   }
 

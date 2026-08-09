@@ -36,7 +36,7 @@ const settings = {
   duplicateSendTtlMin: intEnv('DUPLICATE_SEND_TTL_MIN', 10),
 };
 
-settings.version = '5.0.0';
-settings.repo = 'gashamorujov/WpFastMesenger';
+settings.version = '5.1.0';
+settings.repo = 'gashamorujov/WpFastMesenger-v5';
 
 module.exports = settings;

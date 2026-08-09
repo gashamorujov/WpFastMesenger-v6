@@ -112,3 +112,43 @@ test('broadcast — progress callbacks report per-target status', async () => {
   });
   assert.deepEqual(updates, ['sent', 'sent']);
 });
+
+test('broadcast — ackTracking counts server-delivered messages', async () => {
+  const handlers = {};
+  const sock = makeSock();
+  sock.ev = {
+    on: (ev, cb) => { handlers[ev] = cb; },
+    off: () => {},
+  };
+  const origSend = sock.sendMessage;
+  sock.sendMessage = async (jid, payload) => {
+    const msgId = `ack-${jid}`;
+    setTimeout(() => {
+      if (handlers['messages.update']) handlers['messages.update']([{ key: { id: msgId }, status: 3 }]);
+    }, 5);
+    return { key: { id: msgId } };
+  };
+
+  const report = await broadcast(sock, targets(['994501234567', '994551234567']), { text: 'hi' }, {
+    ackTracking: true,
+    ackTimeoutMs: 500,
+    delayMinMs: 2,
+    delayMaxMs: 2,
+  });
+  assert.equal(report.success, 2);
+  assert.equal(report.delivered, 2);
+  sock.sendMessage = origSend;
+});
+
+test('broadcast — ackTimeout leaves delivered at 0 but success counts', async () => {
+  const sock = makeSock();
+  sock.ev = { on: () => {}, off: () => {} };
+  const report = await broadcast(sock, targets(['994501234567']), { text: 'hi' }, {
+    ackTracking: true,
+    ackTimeoutMs: 20,
+    delayMinMs: 2,
+    delayMaxMs: 2,
+  });
+  assert.equal(report.success, 1);
+  assert.equal(report.delivered, 0);
+});

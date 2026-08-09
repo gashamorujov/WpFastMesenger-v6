@@ -26,6 +26,7 @@ const { broadcast, formatDuration, jidForPhone } = require('../lib/broadcast');
 const { getTelegramMessenger, sessionManager } = require('./services');
 const { STATES } = require('./sessionManager');
 const { formatPhone } = require('../lib/phone');
+const { SS_STOP_BUTTONS, resultButtons, resultButtonsWithAgain, MENU_BUTTON } = require('../lib/menu');
 const { makeLogger } = require('./logger');
 const settings = require('../settings');
 
@@ -118,8 +119,9 @@ function progressText(job, report) {
     `📨 Göndərilir… (${report.done}/${total})\n` +
     `✅ Göndərildi: ${report.success}\n` +
     `❌ Xəta: ${report.fail}\n` +
-    `⏭ Atlanıldı: ${report.skip}` +
-    (report.label ? `\n👤 İndi: ${report.label}` : '')
+    `⏭ Atlanıldı: ${report.skip}\n` +
+    (report.label ? `👤 İndi: ${report.label}\n` : '') +
+    '🛑 Dayandırmaq üçün aşağıdakı düyməyə toxunun.'
   );
 }
 
@@ -133,10 +135,11 @@ function maybeUpdateProgress(job, update, force = false) {
   if (!m || !job.chatId) return;
 
   const text = progressText(job, update);
+  const opts = { reply_markup: { inline_keyboard: SS_STOP_BUTTONS } };
   if (job.progressMsgId) {
-    m.editText(job.chatId, job.progressMsgId, text).then(() => {}).catch(() => {
+    m.editMessage(job.chatId, job.progressMsgId, text, opts).then(() => {}).catch(() => {
       // Fallback: send a fresh message and remember its id
-      m.sendText(job.chatId, text).then((sent) => {
+      m.sendText(job.chatId, text, opts).then((sent) => {
         const fresh = jobStore.read(job.id);
         if (fresh && sent?.message_id) {
           fresh.progressMsgId = sent.message_id;
@@ -145,7 +148,7 @@ function maybeUpdateProgress(job, update, force = false) {
       }).catch(() => {});
     });
   } else {
-    m.sendText(job.chatId, text).then((sent) => {
+    m.sendText(job.chatId, text, opts).then((sent) => {
       const fresh = jobStore.read(job.id);
       if (fresh && sent?.message_id) {
         fresh.progressMsgId = sent.message_id;
@@ -218,6 +221,7 @@ async function executeJob(jobId) {
     maxRetries: settings.broadcastMaxRetries,
     delayMinMs: settings.broadcastDelayMinMs,
     delayMaxMs: settings.broadcastDelayMaxMs,
+    ackTracking: true,
   });
 
   const final = jobStore.read(job.id);
@@ -226,12 +230,17 @@ async function executeJob(jobId) {
   if (final.state === 'cancelled') {
     jobStore.markCancelled(final);
     cleanupMedia(final);
+    finishProgressMessage(final, '🛑 Göndərmə dayandırıldı.', resultButtons());
     return;
   }
 
   if (report.interrupted) {
     jobStore.markInterrupted(final);
-    notifyChat(final, `🔄 WhatsApp bağlantısı kəsildi — iş #${final.id} bərpaya hazırdır. Qoşulduqda avtomatik davam edəcək.\n✅ ${report.success} | ❌ ${report.fail} | ⏭ ${report.skip}`);
+    finishProgressMessage(
+      final,
+      `🔄 WhatsApp bağlantısı kəsildi — iş #${final.id} bərpaya hazırdır. Qoşulduqda avtomatik davam edəcək.\n✅ ${report.success} | ❌ ${report.fail} | ⏭ ${report.skip}`,
+      MENU_BUTTON
+    );
     return;
   }
 
@@ -249,34 +258,51 @@ function autoCleanSession(chatId) {
   }
 }
 
-function sendFinalReport(job, report) {
+function finishProgressMessage(job, text, keyboard) {
+  const m = getTelegramMessenger();
+  if (!m || !job.chatId) return;
+  const opts = { reply_markup: { inline_keyboard: keyboard } };
+  if (job.progressMsgId) {
+    m.editMessage(job.chatId, job.progressMsgId, text, opts)
+      .then(() => {})
+      .catch(() => {
+        m.sendText(job.chatId, text, opts).catch(() => {});
+      });
+  } else {
+    m.sendText(job.chatId, text, opts).catch(() => {});
+  }
+}
+
+function finalReportParts(job, report) {
   const lines = [
     '✅ Göndərmə tamamlandı.',
     '',
     `Mesaj növü: ${job.type || 'text'}`,
     `Ümumi nömrə sayı: ${job.targets.length}`,
     `✅ Uğurla göndərilənlər: ${report.success}`,
+    `📨 WhatsApp tərəfindən qəbul edildi: ${report.delivered}`,
     `❌ Xəta olanlar: ${report.fail}`,
     `⏭ Atlanılanlar: ${report.skip}`,
     `Ümumi icra müddəti: ${formatDuration(report.ms)}`,
   ];
 
-  const keyboard = [];
   if (report.failed.length > 0) {
     lines.push('', '❌ Xəta olan nömrələr:');
     for (const f of report.failed.slice(0, 15)) lines.push(`• ${f.label} — ${f.error || 'Göndərilmədi'}`);
     if (report.failed.length > 15) lines.push(`...və daha ${report.failed.length - 15} nömrə`);
-    keyboard.push([{ text: '🔁 Uğursuzları yenidən cəhd et', callback_data: `sp:retry:${job.id}` }]);
   }
   if (report.skipped.length > 0) {
     lines.push('', '⏭ Atlanılan nömrələr:');
     for (const s of report.skipped.slice(0, 15)) lines.push(`• ${s.label} — ${s.reason}`);
     if (report.skipped.length > 15) lines.push(`...və daha ${report.skipped.length - 15} nömrə`);
   }
-  const { MAIN_MENU_BUTTONS } = require('../lib/menu');
-  keyboard.push([{ text: '🏠 Əsas menyu', callback_data: 'menu' }]);
+  const keyboard = resultButtonsWithAgain(report.failed.length > 0 ? job.id : null, job.id);
+  return { text: lines.join('\n'), keyboard };
+}
 
-  notifyChat(job, lines.join('\n'), { reply_markup: { inline_keyboard: keyboard } });
+function sendFinalReport(job, report) {
+  const { text, keyboard } = finalReportParts(job, report);
+  finishProgressMessage(job, text, keyboard);
 }
 
 function cleanupMedia(job) {
@@ -381,7 +407,7 @@ function cancelChatJobs(chatId) {
  * @param {string} jobId
  * @returns {object|null} the new job
  */
-function retryFailed(jobId) {
+function retryFailed(jobId, progressMsgId = null) {
   const old = jobStore.read(jobId);
   if (!old) return null;
   const failed = old.targets.filter((t) => t.status === 'failed');
@@ -392,6 +418,7 @@ function retryFailed(jobId) {
     type: old.type,
     payloadSpec: old.payloadSpec,
     targets: failed.map((t) => ({ phone: t.phone, name: t.name })),
+    progressMsgId: progressMsgId || null,
   });
   job.payloadKey = old.payloadKey || payloadKeyForSpec(job.payloadSpec);
   jobStore.update(job);

@@ -7,7 +7,7 @@ Telegram üzərindən idarə olunan, **WhatsApp kontaktlarına kontakt əlavə e
 ## 🚀 Deploy
 
 ### Railway
-New Project → Deploy from GitHub → `gashamorujov/WpFastMesenger`
+New Project → Deploy from GitHub → `gashamorujov/WpFastMesenger-v5`
 
 Tələb olunan environment dəyişənləri:
 | Dəyişən | Məcburi | İzah |
@@ -18,18 +18,17 @@ Tələb olunan environment dəyişənləri:
 
 ### VPS
 ```bash
-curl -sL https://github.com/gashamorujov/WpFastMesenger/raw/main/scripts/deploy-vps.sh | bash
+curl -sL https://github.com/gashamorujov/WpFastMesenger-v5/raw/main/scripts/deploy-vps.sh | bash
 ```
 
 ## 🤖 Əmrlər
 
 | Əmr | Funksiya |
 |---|---|
-| `/start` | Banner + əsas menyu |
-| `.gg` / `/qeydiyyat` | WhatsApp-a qoşulma (Pair Code), Reconnect, Log Out |
+| `/start` | Banner + əsas menyu (📒 Kontaktlar • 📨 Toplu Mesaj • 📲 Qoşul • 🔄 Reconnect • 🛑 Dayandır) |
+| `.gg` / `/qeydiyyat` | WhatsApp-a qoşulma (🔐 Pair Code), 🔄 Reconnect, 🚪 Çıxış |
 | `.rr` | Kontakt əlavə etmə (WhatsApp kontaktlarına) |
-| `.ss` | Toplu mesaj göndərmə |
-| `.ss c` | Kontakt seçici birbaşa açılır |
+| `.ss` | Toplu mesaj göndərmə (nömrələr → mesaj → təsdiq → 🚀 Göndər) |
 | `.cc` | İstənilən mərhələdə ləğv |
 
 ### 📇 `.rr` — Kontakt əlavə etmə
@@ -54,21 +53,31 @@ curl -sL https://github.com/gashamorujov/WpFastMesenger/raw/main/scripts/deploy-
 4. WhatsApp bağlantısı yoxdursa kontakt yenə də daxili bazada saxlanılır (proses heç vaxt çökmür).
 5. Sonda hesabat: WhatsApp-a əlavə edilənlər / yenilənənlər / duplikatlar / yalnız daxili saxlanılanlar / xətalar / WhatsApp-da olmayanlar.
 
+### 📒 Kontaktlar (daxili baza)
+
+`/start` menyusundakı **📒 Kontaktlar** düyməsi botun daxili kontakt bazasını açır (`data/contacts.json`). Səhifələnmiş siyahıda hər kontakta toxunmaqla:
+
+- **👁 Məlumat** — WhatsApp statusu, əlavə/ yenilənmə tarixi;
+- **✏️ Ad** — kontaktın adını dəyiş;
+- **🔢 Nömrə** — kontaktın nömrəsini dəyiş (duplicate qorunur);
+- **🗑 Sil** — kontaktı bazadan sil.
+
 ### 📨 `.ss` — Toplu mesaj
 
-1. `.ss` yazın → hədəf seçimi:
-   - **📇 Kontaktlardan seç** — səhifələnmiş seçici (səhifədə 5 kontakt, ✅ Hamısını seç / Ləğv et, ad + nömrə + WhatsApp statusu göstərilir);
-   - **✏️ Əl ilə** — hər sətirdə bir nömrə.
-2. Mesajı göndərin: mətn, şəkil, video, səs, stiker, GIF, fayl, PDF, caption-lı media — format dəyişdirilmir.
-3. Göndəriş **persistent job** kimi işləyir (`data/jobs/`):
+1. `.ss` yazın → **📱 Nömrələri göndər**.
+2. Nömrələri istənilən ayırıcı ilə yazın: sətir, vergül, nöqtəli vergül, boşluq — hamısı dəstəklənir. Duplicate-lər və yanlış formatlar avtomatik bildirilir (yalnız Azərbaycan mobil nömrələri).
+3. Mesajı göndərin: mətn, şəkil, video, səs, stiker, GIF, fayl, PDF, caption-lı media — format dəyişdirilmir. Bu mərhələdə yenidən nömrə yazsanız siyahıya **əlavə olunur**.
+4. Təsdiq ekranı: **📨 Hazırdır** → **[🚀 Göndər] [✖️ Geri]**. Eyni mesaj canlı progress olur və **🛑 Dayandır** düyməsi daşıyır.
+5. Göndəriş **persistent job** kimi işləyir (`data/jobs/`):
    - ardıcıl (queue), təsadüfi gecikmələrlə (WhatsApp limitlərinə uyğun);
    - hər nömrə üçün status: `göndərildi / xəta / atlandı / gözləyir`;
-   - canlı **progress** (Telegram mesajı yenilənir);
+   - canlı **progress** — eyni Telegram mesajı yenilənir, **🛑 Dayandır** düyməsi iş bitdikdə avtomatik silinir;
+   - server **ACK** izlənməsi — hesabatda "📨 WhatsApp tərəfindən qəbul edildi" sayı;
    - **WhatsApp-da olmayan nömrələr** əvvəlcədən yoxlanılır və atlanır (göndərməyə cəhd edilmir);
    - eyni nömrəyə təkrar göndərmə qoruyucusu (`DUPLICATE_SEND_TTL_MIN`);
-   - xəta olan nömrə prosesi dayandırmır; sonda **🔁 Uğursuzları yenidən cəhd et** düyməsi;
+   - xəta olan nömrə prosesi dayandırmır; sonda **📨 Yenidən göndər** və **🔁 Uğursuzları təkrar** düymələri;
    - bağlantı kəsilərsə və ya proses yenidən başladılarsa job **avtomatik bərpa olunur** (göndərilmişlər təkrarlanmır);
-   - `.cc` işi ləğv edir — ləğv edilmiş iş bir daha bərpa olunmur.
+   - `.cc` və ya **🛑 Dayandır** işi ləğv edir — ləğv edilmiş iş bir daha bərpa olunmur.
 
 ## 🇦🇿 Azərbaycan nömrə formatları
 
@@ -117,7 +126,7 @@ Yanlış nömrələr üçün aydın Azərbaycan dilində xəta mesajı göstəri
 
 ```bash
 npm install
-npm test          # 57 unit test (phone, contact store/service, broadcast, queue, jobs, picker, ss flow, payload)
+npm test          # 71 unit test (phone, contacts, contactBrowser, broadcast, queue, jobs, ss flow, payload)
 npm start         # token proyektə əlavə olunub — heç bir env tələb olunmur
 ```
 
@@ -129,10 +138,10 @@ Sağlamlıq yoxlaması: `GET /health` → `{ status, telegram, whatsapp, sha, up
 lib/
   azPhone.js            # Azərbaycan nömrə validasiyası + normalizasiyası (994XXXXXXXXX)
   phone.js              # .rr/.ss mətn parsing, dedup, ad yoxlaması
-  broadcast.js          # ardıcıl göndərmə mühərriki (retry, progress, skip, cancel)
-  picker.js             # kontakt seçici (inline keyboard, səhifələmə)
+  broadcast.js          # ardıcıl göndərmə mühərriki (retry, progress, skip, cancel, ACK)
+  contactBrowser.js     # 📒 kontakt brauzeri (səhifələmə, əməliyyatlar)
   telegramPayload.js    # Telegram → WhatsApp payload (format saxlanılır)
-  menu.js               # menyu layout-ları
+  menu.js               # emoji menyu + düymə layout-ları
 modules/
   contactStore.js       # persistent kontakt bazası (data/contacts.json, upsert/dedup)
   contactService.js     # .rr pipeline: saxla + WhatsApp kontakt sinxronizasiyası
@@ -147,5 +156,6 @@ modules/
   commandParser.js      # .rr/.ss/.gg/.cc + alias-lar
 commands/
   rr.js                 # .rr axını
-  ss.js                 # .ss axını + seçici callback-ləri
+  ss.js                 # .ss axını (nömrə → mesaj → təsdiq → göndər)
+  contacts.js           # 📒 kontakt idarəetmə axını (bax/dəyiş/sil)
 ```

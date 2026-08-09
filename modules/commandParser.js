@@ -22,14 +22,16 @@ function parseCommand(text) {
 }
 
 /**
- * True when the message text contains ONLY numbers (and separators).
- * Used by .ss to detect "more numbers" vs actual message content.
+ * True when the message text contains ONLY numbers (and separators such as
+ * spaces, commas, semicolons, dashes, parentheses). Used by .ss to detect
+ * "more numbers" vs actual message content.
  */
 function isNumbersOnly(text) {
   if (!text || typeof text !== 'string') return false;
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length === 0) return false;
-  return lines.every((l) => /^[+\d][\d\s\-()]*$/.test(l));
+  const t = text.trim();
+  if (!t) return false;
+  if (!/\d/.test(t)) return false;
+  return /^[0-9+\s\-(),;.]+$/.test(t);
 }
 
 /** True when the text is a single phone number (used for Pair Code). */

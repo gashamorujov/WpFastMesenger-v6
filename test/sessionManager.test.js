@@ -4,12 +4,12 @@ const { SessionManager, STATES } = require('../modules/sessionManager');
 const fs = require('fs-extra');
 const path = require('path');
 
-test('session states, picker and cleanup', async () => {
+test('session states, contact flow and cleanup', async () => {
   const sm = new SessionManager();
   const s = sm.get('chat1');
   s.state = STATES.SS_NUMBERS;
   s.numbers.push({ phone: '994501234567', name: 'A' });
-  s.picker.page = 2;
+  s.ctPhone = '994501234567';
 
   const tmp = path.join(__dirname, 'tmp-test-session.txt');
   fs.writeFileSync(tmp, 'x');
@@ -17,7 +17,7 @@ test('session states, picker and cleanup', async () => {
 
   assert.equal(sm.cancel('chat1'), true);
   assert.equal(s.numbers.length, 0);
-  assert.equal(s.picker.page, 0);
+  assert.equal(s.ctPhone, null);
   assert.equal(s.state, STATES.IDLE);
   assert.equal(fs.existsSync(tmp), false);
   assert.equal(sm.cancel('missing-chat'), false);

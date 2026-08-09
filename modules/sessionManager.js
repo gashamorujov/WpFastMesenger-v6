@@ -20,6 +20,9 @@ const STATES = {
   RR: 'rr',
   SS_NUMBERS: 'ss_numbers',
   SS_CONTENT: 'ss_content',
+  SS_CONFIRM: 'ss_confirm',
+  CT_RENAME: 'ct_rename',
+  CT_NUMBER: 'ct_number',
   BUSY: 'busy',
 };
 
@@ -33,7 +36,10 @@ class Session {
     this.msgId = null;          // Telegram prompt message id (cleanup helper)
     this.contacts = [];         // .rr validated contacts (pending + processed markers)
     this.numbers = [];          // .ss targets [{phone, name?}] (normalized, E.164)
-    this.picker = { page: 0 };  // .ss contact-picker pagination state
+    this.pendingPayload = null; // .ss built payload awaiting 🚀 Göndər confirmation
+    this.jobId = null;          // .ss job currently started from this chat
+    this.ctPhone = null;        // contact being edited (rename / change number)
+    this.botMsgs = [];          // bot prompt message ids cleaned on next action
     this.contentCount = 0;      // .ss content items queued
     this.tempFiles = [];        // downloaded media temp files
     this.timer = null;          // idle expiry timer
@@ -89,7 +95,10 @@ class SessionManager {
     s.contacts.length = 0;
     s.numbers.length = 0;
     s.contentCount = 0;
-    s.picker = { page: 0 };
+    s.pendingPayload = null;
+    s.jobId = null;
+    s.ctPhone = null;
+    s.botMsgs.length = 0;
 
     this.clearTempFiles(chatId);
 
