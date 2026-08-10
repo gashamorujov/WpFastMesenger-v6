@@ -28,7 +28,7 @@ const broadcastService = require('../modules/broadcastService');
 const { specFromBuilt } = require('../lib/telegramPayload');
 const { formatPhone, toLocal } = require('../lib/azPhone');
 const cleanup = require('../modules/messageCleanup');
-const { SS_CONFIRM_BUTTONS, SS_STOP_BUTTONS, MENU_BUTTON } = require('../lib/menu');
+const { SS_CONFIRM_BUTTONS, SS_STOP_BUTTONS, MENU_BUTTON, CANCEL_BUTTON } = require('../lib/menu');
 const wa = require('../modules/whatsappManager');
 const { makeLogger } = require('../modules/logger');
 
@@ -125,7 +125,7 @@ async function start(chatId, ctx) {
   s.numbers = [];
   s.pendingPayload = null;
   sessionManager.touch(chatId);
-  await sendFlowMessage(chatId, ctx, NUMBERS_PROMPT);
+  await sendFlowMessage(chatId, ctx, NUMBERS_PROMPT, CANCEL_BUTTON);
 }
 
 /**
@@ -196,7 +196,7 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
   if (s.state === STATES.SS_NUMBERS) {
     const { numbers, duplicates, invalid } = extractNumbers(text);
     if (numbers.length === 0) {
-      await sendFlowMessage(chatId, ctx, `❌ Nömrə tapılmadı.\n\n${NUMBERS_PROMPT}`);
+      await sendFlowMessage(chatId, ctx, `❌ Nömrə tapılmadı.\n\n${NUMBERS_PROMPT}`, CANCEL_BUTTON);
       return true;
     }
 
@@ -206,7 +206,7 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
 
     const recent = fresh.filter((n) => recentSends.isRecent(n));
     s.state = STATES.SS_CONTENT;
-    await sendFlowMessage(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
+    await sendFlowMessage(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent), CANCEL_BUTTON);
     return true;
   }
 
@@ -218,9 +218,9 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
     for (const n of fresh) s.numbers.push({ phone: n, name: null });
     const recent = fresh.filter((n) => recentSends.isRecent(n));
     if (fresh.length === 0) {
-      await sendFlowMessage(chatId, ctx, `🔁 Yeni nömrə əlavə olunmadı (hamısı mövcuddur).\n\n👥 ${s.numbers.length} nömrə:\n\n${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n${CONTENT_PROMPT}`);
+      await sendFlowMessage(chatId, ctx, `🔁 Yeni nömrə əlavə olunmadı (hamısı mövcuddur).\n\n👥 ${s.numbers.length} nömrə:\n\n${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n${CONTENT_PROMPT}`, CANCEL_BUTTON);
     } else {
-      await sendFlowMessage(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
+    await sendFlowMessage(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent), CANCEL_BUTTON);
     }
     return true;
   }
@@ -307,7 +307,7 @@ async function handleAction(chatId, action, ctx) {
   if (cmd === 'back') {
     cleanupPending(s);
     s.state = STATES.SS_CONTENT;
-    await sendFlowMessage(chatId, ctx, `✖️ Geri qayıtdınız.\n\n👥 ${s.numbers.length} nömrə\n\n${CONTENT_PROMPT}`);
+    await sendFlowMessage(chatId, ctx, `✖️ Geri qayıtdınız.\n\n👥 ${s.numbers.length} nömrə\n\n${CONTENT_PROMPT}`, CANCEL_BUTTON);
     return true;
   }
 
@@ -354,7 +354,7 @@ async function handleAction(chatId, action, ctx) {
     sessionManager.touch(chatId);
     await sendFlowMessage(chatId, ctx, `👥 ${fresh.numbers.length} nömrə
 
-💬 Yeni mesajı yaz (mətn və ya media):`);
+💬 Yeni mesajı yaz (mətn və ya media):`, CANCEL_BUTTON);
     return true;
   }
 

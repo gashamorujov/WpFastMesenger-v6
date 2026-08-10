@@ -239,6 +239,8 @@ async function handleCallback(query) {
   }
   if (data === 'cc') {
     // ⛔ Prosesi ləğv et — .cc ilə eyni funksiya
+    // Düymənin olduğu sorğu mesajı silinir, sonra ləğv təsdiqi göndərilir
+    try { await bot.deleteMessage(chatId, messageId); } catch {}
     sessionManager.cancel(chatId);
     await cleanup.deleteTracked(chatId);
     broadcastService.cancelChatJobs(chatId);

@@ -5,6 +5,7 @@ const {
   CONNECTION_MENU_BUTTONS,
   CONTACTS_MENU_BUTTONS,
   DATABASE_MENU_BUTTONS,
+  CANCEL_BUTTON,
   SS_CONFIRM_BUTTONS,
   SS_STOP_BUTTONS,
   resultButtons,
@@ -14,18 +15,25 @@ const {
 const texts = (rows) => rows.flat().map((b) => b.text).join(' | ');
 const data = (rows) => rows.flat().map((b) => b.callback_data);
 
-test('main menu — has .rr, no Reconnect, no 🛑 Dayandır, has ⛔ ləğv', () => {
+test('main menu — has .rr, no Reconnect, no 🛑 Dayandır, ⛔ YOXDUR', () => {
   const t = texts(MAIN_MENU_BUTTONS);
   assert.match(t, /📇 Kontakt Əlavə Et/);
   assert.match(t, /📒 Kontaktlar/);
   assert.match(t, /📨 Toplu Mesaj/);
   assert.match(t, /📲 Qoşul/);
-  assert.match(t, /⛔ Prosesi ləğv et/);
+  assert.doesNotMatch(t, /⛔/);
   assert.doesNotMatch(t, /Reconnect/i);
   assert.doesNotMatch(t, /🛑/);
   assert.ok(data(MAIN_MENU_BUTTONS).includes('.rr'));
-  assert.ok(data(MAIN_MENU_BUTTONS).includes('cc'));
+  assert.ok(!data(MAIN_MENU_BUTTONS).includes('cc'));
   assert.ok(!data(MAIN_MENU_BUTTONS).includes('reconnect'));
+});
+
+test('CANCEL_BUTTON — geniş ⛔ düyməsi (cc) .ss/.gg/.rr sorğuları üçün', () => {
+  assert.equal(CANCEL_BUTTON.length, 1);
+  assert.equal(CANCEL_BUTTON[0].length, 1);
+  assert.equal(CANCEL_BUTTON[0][0].callback_data, 'cc');
+  assert.match(CANCEL_BUTTON[0][0].text, /⛔ Prosesi ləğv et/);
 });
 
 test('connection menu — QR + Pair, Reconnect yoxdur', () => {

@@ -59,6 +59,9 @@ test('ss.start — numbers prompt + SS_NUMBERS state', async () => {
   assert.equal(sessionManager.get('c1').state, STATES.SS_NUMBERS);
   assert.match(chat.sent[0].text, /Nömrələri daxil edin/);
   assert.match(chat.sent[0].text, /503482690/);
+  // Sorğu mesajında geniş ⛔ ləğv düyməsi olmalıdır
+  const labels = chat.sent[0].opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(labels.includes('⛔ Prosesi ləğv et'));
 });
 
 test('ss.handle — manual numbers phase → content phase', async () => {

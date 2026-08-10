@@ -13,7 +13,7 @@
  *   5. final report: total / added to WA / updated / stored / duplicates /
  *      failures + numbers not registered on WhatsApp
  *
- * `.cc` cancels at any point.
+ * `.cc` / ⛔ Prosesi ləğv et cancels at any point.
  */
 const { parseContacts } = require('../lib/phone');
 const contactService = require('../modules/contactService');
@@ -23,7 +23,7 @@ const { sessionManager } = require('../modules/services');
 const { STATES } = require('../modules/sessionManager');
 const { formatDuration } = require('../lib/broadcast');
 const { formatPhone } = require('../lib/azPhone');
-const { MAIN_MENU_BUTTONS } = require('../lib/menu');
+const { MAIN_MENU_BUTTONS, CANCEL_BUTTON } = require('../lib/menu');
 const cleanup = require('../modules/messageCleanup');
 
 const TEMPLATE =
@@ -34,8 +34,7 @@ const TEMPLATE =
   'Dəstəklənən nömrə formatları:\n' +
   '+994501234567 • 994501234567 • 0501234567 • 050 123 45 67\n\n' +
   'Kontaktlar WhatsApp kontaktlarına əlavə olunur (yalnız WhatsApp-da, telefon kitabçasına yazılmır).\n' +
-  'Artıq mövcud nömrə duplicate yaradılmadan yenilənir.\n\n' +
-  'Prosesi ləğv etmək üçün:\n.cc';
+  'Artıq mövcud nömrə duplicate yaradılmadan yenilənir.';
 
 /**
  * @param {string} chatId
@@ -50,7 +49,7 @@ async function start(chatId, send) {
   sessionManager.touch(chatId);
 
   if (send) {
-    const sent = await send(TEMPLATE);
+    const sent = await send(TEMPLATE, { reply_markup: { inline_keyboard: CANCEL_BUTTON } });
     cleanup.track(chatId, sent?.message_id);
   }
 }
@@ -209,8 +208,8 @@ async function handle(chatId, text, send) {
     if (errors.length === 0) {
       lines.push('⚠️ Nömrə tapılmadı. Format: Ad Soyad + nömrə.');
     }
-    lines.push('', 'Düzəliş edib yenidən göndərin və ya .cc ilə ləğv edin.');
-    const ackErr = await send(lines.join('\n'));
+    lines.push('', 'Düzəliş edib yenidən göndərin və ya ⛔ düyməsi ilə ləğv edin.');
+    const ackErr = await send(lines.join('\n'), { reply_markup: { inline_keyboard: CANCEL_BUTTON } });
     cleanup.track(chatId, ackErr?.message_id);
     return true;
   }
