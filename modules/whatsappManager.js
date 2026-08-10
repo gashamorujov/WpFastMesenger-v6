@@ -94,6 +94,39 @@ async function sayPhoto(bot, chatId, buffer, caption) {
   }
 }
 
+// ─── Qoşulma mesajlarının izlənməsi/təmizlənməsi ───
+// QR kodu, Pair Code və "qoşulur..." kimi MÜVƏQQƏTİ mesajlar uğurlu
+// qoşulmadan sonra avtomatik silinir; yalnız "✅ Uğurla qoşuldu" qalır.
+const connTrack = new Map(); // phone -> [{ chatId, messageId }]
+
+function trackConnMsg(phone, msg) {
+  if (!phone || !msg?.message_id) return;
+  if (!connTrack.has(phone)) connTrack.set(phone, []);
+  connTrack.get(phone).push({ chatId: msg.chat?.id, messageId: msg.message_id });
+}
+
+async function sayConn(bot, chatId, phone, text, opts) {
+  const m = await say(bot, chatId, text, opts);
+  trackConnMsg(phone, m);
+  return m;
+}
+
+async function sayPhotoConn(bot, chatId, phone, buffer, caption) {
+  const m = await sayPhoto(bot, chatId, buffer, caption);
+  trackConnMsg(phone, m);
+  return m;
+}
+
+async function clearConnMsgs(phone, bot) {
+  const list = connTrack.get(phone) || [];
+  connTrack.delete(phone);
+  for (const item of list) {
+    try {
+      if (bot && item.chatId && item.messageId) await bot.deleteMessage(item.chatId, item.messageId);
+    } catch {}
+  }
+}
+
 // All commands are controlled from Telegram; WhatsApp messages are not
 // processed by the bot itself (no handlers are registered).
 
@@ -115,7 +148,7 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
   }
 
   const methodName = method === 'qr' ? 'QR Code' : 'Pair Code';
-  await say(bot, chatId, `+${phone} ${methodName} ilə qoşulur...`, { parse_mode: 'Markdown' });
+  await sayConn(bot, chatId, phone, `+${phone} ${methodName} ilə qoşulur...`, { parse_mode: 'Markdown' });
 
   try {
     const dir = sessDir(phone);
@@ -159,7 +192,7 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
         if (method === 'qr') {
           try {
             const buf = await QRCode.toBuffer(qr, { type: 'png', margin: 2, scale: 8 });
-            await sayPhoto(bot, chatId, buf, `📷 *QR Code* for +${phone}\n\n1. WhatsApp → Linked Devices\n2. *Link a Device*\n3. *Scan* the QR`);
+            await sayPhotoConn(bot, chatId, phone, buf, `📷 *QR Code* for +${phone}\n\n1. WhatsApp → Linked Devices\n2. *Link a Device*\n3. *Scan* the QR`);
           } catch (err) {
             LOG.error('QR gen error:', err.message);
             await say(bot, chatId, 'QR xətası: ' + err.message);
@@ -190,7 +223,9 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
         saveSessionsData();
         incoming.setChat(phone, sessionsData[phone].chatId);
         activeConnections[phone] = sock;
-        await say(bot, chatId, `✅ Connected!\n+${phone}\n${sock.user?.name || ''}`, { parse_mode: 'Markdown' });
+        // Müvəqqəti qoşulma mesajları (QR / Pair Code / "qoşulur...") silinir
+        await clearConnMsgs(phone, bot);
+        await say(bot, chatId, `✅ Uğurla qoşuldu!\n+${phone}\n${sock.user?.name || ''}`, { parse_mode: 'Markdown' });
         fireConnectedHooks(phone, sock);
       }
 
@@ -201,6 +236,7 @@ async function connectWithPhone(phone, method = 'pair', bot = null, chatId = nul
         delete activeConnections[phone];
 
         if (code === DisconnectReason.loggedOut || code === 401) {
+          clearConnMsgs(phone, bot);
           delete sessionsData[phone];
           saveSessionsData();
           incoming.removePhone(phone);
@@ -273,9 +309,10 @@ async function requestPairingCodeWithRetry(sock, phone, bot, chatId, maxRetries 
       code = code?.match(/.{1,4}/g)?.join('-') || code;
       LOG.info(`Pairing code for ${phone}: ${code}`);
 
-      await say(
+      await sayConn(
         bot,
         chatId,
+        phone,
         `🔐 *Pairing Code ready!*\n\n` +
           `Code:\n\`${code}\`\n\n` +
           `📲 WhatsApp → Linked Devices → Link with phone number → enter code\n\n` +

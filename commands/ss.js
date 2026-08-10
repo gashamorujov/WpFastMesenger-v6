@@ -164,11 +164,16 @@ async function showConfirm(chatId, ctx) {
   const s = sessionManager.get(chatId);
   if (!s.pendingPayload || s.numbers.length === 0) return;
   const { built } = s.pendingPayload;
+  const SEP = '━━━━━━━━━━━━━━━━━━━━';
   const text =
-    `📨 Hazırdır\n\n` +
-    `👥 ${s.numbers.length} nömrə:\n\n` +
+    `📨 Göndəriş Təsdiqi\n` +
+    `${SEP}\n` +
+    `👥 Alıcı sayı: ${s.numbers.length}\n\n` +
+    `📋 Göndəriləcək nömrələr:\n` +
     `${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n` +
-    `💬 ${previewText(built)}`;
+    `💬 Mesaj:\n${previewText(built)}\n` +
+    `${SEP}\n` +
+    `Davam etmək üçün 🚀 Göndər düyməsinə toxunun.`;
   // Köhnə "Mesajı yaz" sorğusu silinir, təsdiq mesajı istifadəçinin
   // mesajından SONRA ən aşağıda yaradılır
   await sendFlowMessage(chatId, ctx, text, SS_CONFIRM_BUTTONS);

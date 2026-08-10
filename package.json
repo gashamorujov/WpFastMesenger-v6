@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-bulk-bot",
-  "version": "5.0.0",
-  "description": "WhatsApp Automation Bot \u2014 Telegram-controllable bulk messaging & WhatsApp contact registration (Azerbaijani numbers)",
+  "version": "6.0.0",
+  "description": "WhatsApp Automation Bot — Telegram-controllable bulk messaging & WhatsApp contact registration (Azerbaijani numbers). Production-ready, deploy on Railway/VPS/Docker.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

@@ -20,7 +20,7 @@ test('normalizePhone — all supported Azerbaijani formats', () => {
 });
 
 test('normalizePhone — invalid inputs return null', () => {
-  for (const bad of ['', 'abc', '0123456789', '994123456789', '055123456', '+9945512345678', '9940501234567', '123456789', null, undefined, '050 123 45']) {
+  for (const bad of ['', 'abc', '0123456789', '994123456789', '055123456', '+9945512345678', '123456789', null, undefined, '050 123 45']) {
     assert.equal(normalizePhone(bad), null, `expected null for ${JSON.stringify(bad)}`);
   }
 });
@@ -112,4 +112,14 @@ test('extractNumbers — arbitrary number of lines accepted', () => {
   const lines = Array.from({ length: 50 }, (_, i) => `050${String(1000000 + i)}`);
   const { numbers } = extractNumbers(lines.join('\n'));
   assert.equal(numbers.length, 50);
+});
+
+test('13-rəqəmli format 9940XXXXXXXXX — 050XXXXXXXX ilə eyni nömrə', () => {
+  const a = normalizePhone('9940503482680');
+  const b = normalizePhone('0503482680');
+  assert.equal(a, '994503482680');
+  assert.equal(a, b);
+  const c = normalizePhone('9940501234567');
+  assert.equal(c, '994501234567');
+  assert.equal(normalizePhone('9940503482680'), normalizePhone('+994 50 348 26 80'));
 });

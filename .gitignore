@@ -6,7 +6,15 @@ temp/
 tmp/
 sessions/
 media_cache/
-data/
+
+# Runtime job/send state — təmiz deploy üçün saxlanılmır
+data/jobs/
+data/recent-sends.json
+data/auto-update-state.json
+
+# Kontakt database layihə ilə BİRLİKDƏ saxlanılır (data/contacts.json).
+# Diqqət: şəxsi telefon nömrələri var — repository PRIVATE olmalıdır,
+# və ya BOT_DATA_DIR ilə ayrıca persistent storage istifadə edin.
 
 # Environment
 .env

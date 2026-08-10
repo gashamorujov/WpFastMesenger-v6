@@ -80,3 +80,41 @@ test('back deletes the tapped message', async () => {
   await contacts.handleAction('c5', 'back', chat);
   assert.deepEqual(chat.deleted, [7]);
 });
+
+test('contacts menu → database menu → sync flow (ct:menu/ct:db/ct:sync)', async () => {
+  const chat = fakeChat();
+  await contacts.handleAction('c4', 'menu', chat);
+  const menuText = chat.edited[chat.edited.length - 1].text;
+  assert.match(menuText, /📒 Kontaktlar/);
+  const menuLabels = chat.edited[chat.edited.length - 1].opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(menuLabels.includes('✏️ Düzəliş et'));
+  assert.ok(menuLabels.includes('🗄 Database'));
+
+  await contacts.handleAction('c4', 'db', chat);
+  const dbText = chat.edited[chat.edited.length - 1].text;
+  assert.match(dbText, /🗄 Database/);
+  const dbLabels = chat.edited[chat.edited.length - 1].opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(dbLabels.includes('➕ Kontakta əlavə et'));
+});
+
+test('contact search by name and by number (ct:search + handleText)', async () => {
+  // Əvvəlki testlər Akif/Zəhra kontaktlarını silib/dəyişib — yenidən seed et
+  contactStore.upsert({ name: 'Akif Babayev', phone: '0773648648' });
+  contactStore.upsert({ name: 'Zəhra', phone: '0501234567' });
+  const chat = fakeChat();
+  await contacts.handleAction('c5', 'search', chat);
+  assert.equal(sessionManager.get('c5').state, STATES.CT_SEARCH);
+
+  // Adla axtarış
+  await contacts.handleText('c5', 'akif', chat);
+  let last = chat.edited[chat.edited.length - 1];
+  const labels1 = last.opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(labels1.some((t) => t.includes('Akif Babayev')));
+
+  // Nömrə ilə axtarış (müxtəlif format)
+  await contacts.handleAction('c5', 'search', chat);
+  await contacts.handleText('c5', '0501234567', chat);
+  last = chat.edited[chat.edited.length - 1];
+  const labels2 = last.opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(labels2.some((t) => t.includes('Zəhra')));
+});

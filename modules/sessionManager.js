@@ -23,6 +23,7 @@ const STATES = {
   SS_CONFIRM: 'ss_confirm',
   CT_RENAME: 'ct_rename',
   CT_NUMBER: 'ct_number',
+  CT_SEARCH: 'ct_search',
   BUSY: 'busy',
 };
 

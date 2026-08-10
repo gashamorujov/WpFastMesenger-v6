@@ -1,11 +1,11 @@
 /**
  * Central configuration.
  *
- * TELEGRAM_TOKEN: env dəyişəni üstünlük təşkil edir; göstərilməyibsə
- * proyektə əlavə edilmiş default bot tokeni istifadə olunur — beləliklə
- * deploy üçün heç bir konfiqurasiya tələb olunmur.
+ * BÜTÜN gizli məlumatlar (TELEGRAM_TOKEN və s.) YALNIZ environment
+ * variable-larından götürülür — heç nə hard-code edilmir. Token yoxdursa
+ * bot başlamır (index.js yoxlayır).
  */
-const token = process.env.TELEGRAM_TOKEN || '8632481071:AAElWXsJv_htHYRdt1o2QBqWFOl6oRE2NOY';
+const token = process.env.TELEGRAM_TOKEN || '';
 
 function intEnv(name, fallback) {
   const v = parseInt(process.env[name], 10);
@@ -36,7 +36,7 @@ const settings = {
   duplicateSendTtlMin: intEnv('DUPLICATE_SEND_TTL_MIN', 10),
 };
 
-settings.version = '5.1.0';
-settings.repo = 'gashamorujov/WpFastMesenger-v5';
+settings.version = '6.0.0';
+settings.repo = 'gashamorujov/WpFastMesenger-v6';
 
 module.exports = settings;

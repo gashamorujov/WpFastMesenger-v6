@@ -29,7 +29,7 @@ const rr = require('../commands/rr');
 const ss = require('../commands/ss');
 const contacts = require('../commands/contacts');
 const tgPayload = require('../lib/telegramPayload');
-const { MAIN_MENU_BUTTONS, CONNECTION_MENU_BUTTONS } = require('../lib/menu');
+const { MAIN_MENU_BUTTONS, CONNECTION_MENU_BUTTONS, CANCEL_BUTTON } = require('../lib/menu');
 const broadcastService = require('./broadcastService');
 const cleanup = require('./messageCleanup');
 
@@ -49,9 +49,9 @@ const GG_PROMPT =
   '📲 WhatsApp-a bağlanmaq üçün nömrənizi göndərin.\n\n' +
   'Format: 994XXXXXXXXX\n' +
   'Nümunə: 994501234567\n\n' +
-  'Qoşulma üçün yeni Pair Code gələcək:\n' +
-  'WhatsApp → Linked Devices → Link with phone number\n\n' +
-  'Ləğv etmək üçün: .cc';
+  'Qoşulma seçdiyiniz üsulla baş verəcək:\n' +
+  '🔐 Pair Code → WhatsApp → Linked Devices → Link with phone number\n' +
+  '📷 QR Code → WhatsApp → Linked Devices → Link a Device → Scan';
 
 let bot = null;
 let botToken = null;
@@ -209,8 +209,8 @@ function registerHandlers(instance) {
 
 /**
  * A button tap on the /start banner behaves exactly like typing the command.
- * Special registration callbacks (.gg → connection menu, pair, reconnect,
- * logout, menu) are handled here; everything else is routed as text.
+ * Special registration callbacks (.gg → connection menu: pair / qr / logout /
+ * menu / cc) are handled here; everything else is routed as text.
  */
 async function handleCallback(query) {
   if (!query?.data || !query?.message?.chat?.id) return;
@@ -220,7 +220,7 @@ async function handleCallback(query) {
 
   const data = query.data;
 
-  // Qeydiyyat → connection menu (Pair Code / Reconnect / Log Out)
+  // Qeydiyyat → connection menu (Pair Code / QR Code / Log Out)
   if (data === '.gg') {
     await setMenu(chatId, messageId, CONNECTION_MENU_BUTTONS);
     return;
@@ -229,16 +229,20 @@ async function handleCallback(query) {
     await setMenu(chatId, messageId, MAIN_MENU_BUTTONS);
     return;
   }
-  if (data === 'pair') {
+  if (data === 'pair' || data === 'qr') {
     sessionManager.cancel(chatId);
     const s = sessionManager.get(chatId);
-    s.flow = 'pair';
+    s.flow = data;
     sessionManager.touch(chatId);
-    await sendText(chatId, GG_PROMPT);
+    await sendText(chatId, GG_PROMPT, { reply_markup: { inline_keyboard: CANCEL_BUTTON } });
     return;
   }
-  if (data === 'reconnect') {
-    await handleReconnect(chatId);
+  if (data === 'cc') {
+    // ⛔ Prosesi ləğv et — .cc ilə eyni funksiya
+    sessionManager.cancel(chatId);
+    await cleanup.deleteTracked(chatId);
+    broadcastService.cancelChatJobs(chatId);
+    await sendText(chatId, '✅ Əməliyyat uğurla ləğv edildi.', { reply_markup: { inline_keyboard: MAIN_MENU_BUTTONS } });
     return;
   }
   if (data === 'logout') {
@@ -308,27 +312,6 @@ async function setMenu(chatId, messageId, buttons) {
     await m.sendText(chatId, '🎛 Menyu:', { reply_markup: { inline_keyboard: buttons } });
   } catch (e) {
     LOG.error('setMenu failed:', e.message);
-  }
-}
-
-/** Reconnect the first stored WhatsApp session. */
-async function handleReconnect(chatId) {
-  const entries = Object.entries(wa.sessionsData || {});
-  if (entries.length === 0) {
-    await sendText(chatId, '❌ Heç bir sessiya yoxdur. Əvvəlcə 🔐 Pair Code ilə qoşulun.');
-    return;
-  }
-  const [phone] = entries[0];
-  const status = wa.sessionsData[phone]?.status;
-  if (status === 'connected' && wa.activeConnections[phone]) {
-    await sendText(chatId, `✅ +${phone} artıq bağlıdır.`);
-    return;
-  }
-  await sendText(chatId, `🔄 +${phone} yenidən qoşulur...`);
-  try {
-    await wa.connectWithPhone(phone, 'pair', bot, chatId);
-  } catch (err) {
-    LOG.error('Reconnect error:', err.message);
   }
 }
 
@@ -411,12 +394,12 @@ async function routeMessage(msg) {
       await handlePairInput(chatId, { text: phone });
       return;
     }
-    // .gg → ask for the number first
+    // .gg → ask for the number first (default Pair Code)
     sessionManager.cancel(chatId);
     const s = sessionManager.get(chatId);
     s.flow = 'pair';
     sessionManager.touch(chatId);
-    await send(GG_PROMPT);
+    await send(GG_PROMPT, { reply_markup: { inline_keyboard: CANCEL_BUTTON } });
     return;
   }
 
@@ -430,8 +413,8 @@ async function routeMessage(msg) {
     return;
   }
 
-  // Pair Code flow — waiting for a phone number
-  if (s.flow === 'pair') {
+  // Pair Code / QR Code flow — waiting for a phone number
+  if (s.flow === 'pair' || s.flow === 'qr') {
     await handlePairInput(chatId, msg);
     return;
   }
@@ -445,7 +428,7 @@ async function routeMessage(msg) {
     await ss.handle(chatId, msg, text, ctx, buildPayload);
     return;
   }
-  if (s.state === STATES.CT_RENAME || s.state === STATES.CT_NUMBER) {
+  if (s.state === STATES.CT_RENAME || s.state === STATES.CT_NUMBER || s.state === STATES.CT_SEARCH) {
     await contacts.handleText(chatId, text, ctx);
     return;
   }
@@ -478,6 +461,7 @@ function normalizeCommandText(text) {
 async function handlePairInput(chatId, msg) {
   const s = sessionManager.get(chatId);
   const text = msg.text || '';
+  const method = s.flow === 'qr' ? 'qr' : 'pair';
 
   const phone = text.replace(/[^0-9]/g, '');
   if (!phone || phone.length < 7 || phone.length > 15) {
@@ -491,10 +475,8 @@ async function handlePairInput(chatId, msg) {
 
   sessionManager.reset(chatId); // clear any stale state
 
-  await sendText(chatId, `🔄 +${phone} üçün Pair Code yaradılır...`, { parse_mode: 'Markdown' });
-
   try {
-    await wa.connectWithPhone(phone, 'pair', bot, chatId);
+    await wa.connectWithPhone(phone, method, bot, chatId);
   } catch (err) {
     LOG.error('Pair error:', err.message);
   }

@@ -1,19 +1,27 @@
 /**
- * contacts — 📒 Kontaktlar: browse the internal contact database and manage
- * entries (✏️ Adını dəyiş / 🔢 Nömrəni dəyiş / 🗑 Sil / 👁 Məlumata bax).
+ * contacts — 📒 Kontaktlar: daxili kontakt database-ni idarə edir.
  *
- * Callbacks (`ct:*`) edit the tapped message in place, so old bot messages
- * don't pile up. Rename / change-number flows ask for text input via session
- * states CT_RENAME / CT_NUMBER.
+ * Struktur:
+ *   📒 Kontaktlar (ct:menu)
+ *   ├── ✏️ Düzəliş et (ct:edit) → mövcud brauzer (ad/nömrə ilə axtarış + düzəliş)
+ *   └── 🗄 Database (ct:db)
+ *       ├── ➕ Kontakta əlavə et (ct:sync) → database-dəki BÜTÜN kontaktları
+ *       │     WhatsApp kontaktlarına əlavə edir (mövcud mexanizmlə)
+ *       └── ↩️ Geri
+ *
+ * Callbacks (`ct:*`) tapped mesajı yerində redaktə edir. Ad/nömrə
+ * dəyişdiriləndə database avtomatik yenilənir (contactStore).
  */
-const { sessionManager } = require('../modules/services');
+const { sessionManager, getTelegramMessenger } = require('../modules/services');
 const { STATES } = require('../modules/sessionManager');
 const contactStore = require('../modules/contactStore');
+const contactService = require('../modules/contactService');
 const { buildContactList, buildContactActions, buildContactInfo } = require('../lib/contactBrowser');
 const { validateName, extractNumbers } = require('../lib/phone');
 const { formatPhone } = require('../lib/azPhone');
+const { CONTACTS_MENU_BUTTONS, DATABASE_MENU_BUTTONS } = require('../lib/menu');
 
-/** Open the contact list as a new message (main menu / .rr report). */
+/** Open the contact list as a new message (✏️ Düzəliş et). */
 async function openList(chatId, ctx) {
   const s = sessionManager.get(chatId);
   s.state = STATES.IDLE;
@@ -61,7 +69,7 @@ function contactKeyboard(phone, extra = []) {
 /**
  * Handle a `ct:*` callback action.
  * @param {string} chatId
- * @param {string} action — e.g. 'view:994501234567' | 'page:2' | 'open' | ...
+ * @param {string} action — e.g. 'view:994501234567' | 'page:2' | 'menu' | 'db' | 'sync'
  * @param {object} ctx — { send, edit, deleteMsg, messageId }
  */
 async function handleAction(chatId, action, ctx) {
@@ -70,6 +78,67 @@ async function handleAction(chatId, action, ctx) {
   sessionManager.touch(chatId);
 
   const [cmd, payload] = action.split(':');
+
+  if (cmd === 'menu') {
+    // 📒 Kontaktlar bölməsi: ✏️ Düzəliş et / 🗄 Database
+    s.state = STATES.IDLE;
+    await ctx.edit('📒 Kontaktlar\n\nSeçim edin:', { reply_markup: { inline_keyboard: CONTACTS_MENU_BUTTONS } });
+    return true;
+  }
+
+  if (cmd === 'edit') {
+    await openList(chatId, ctx);
+    return true;
+  }
+
+  if (cmd === 'db') {
+    s.state = STATES.IDLE;
+    const total = contactStore.count();
+    await ctx.edit(
+      `🗄 Database\n\nDaxili bazada ${total} kontakt saxlanılır.\n\nDatabase-dəki bütün kontaktları WhatsApp kontaktlarına əlavə etmək üçün düyməyə toxunun:`,
+      { reply_markup: { inline_keyboard: DATABASE_MENU_BUTTONS } }
+    );
+    return true;
+  }
+
+  if (cmd === 'sync') {
+    // Database → WhatsApp kontaktları (mövcud addOrEditContact mexanizmi)
+    const progress = await ctx.send('🗄 Database sinxronlaşdırılır…\n\nKontaktlar WhatsApp kontaktlarına əlavə edilir...');
+    const res = await contactService.syncAllToWhatsApp();
+    const lines = [
+      res.ok ? '✅ Sinxronlaşdırma tamamlandı.' : `❌ ${res.reason || 'Sinxronlaşdırma mümkün olmadı.'}`,
+      '',
+      `🗄 Database kontaktları: ${res.total}`,
+      `✅ WhatsApp-a əlavə edildi: ${res.okCount}`,
+    ];
+    if (res.failed.length > 0) {
+      lines.push('', `❌ Uğursuz (${res.failed.length}):`);
+      for (const f of res.failed.slice(0, 10)) lines.push(`• ${f.name} — ${f.reason}`);
+      if (res.failed.length > 10) lines.push(`...və daha ${res.failed.length - 10}`);
+    }
+    lines.push('', 'Yenidən sinxronlaşdırmaq üçün düyməyə toxunun.');
+    const text = lines.join('\n');
+    const m = getTelegramMessenger();
+    if (m && progress?.message_id) {
+      try {
+        await m.editMessage(chatId, progress.message_id, text, { reply_markup: { inline_keyboard: DATABASE_MENU_BUTTONS } });
+      } catch {
+        await ctx.send(text);
+      }
+    } else {
+      await ctx.send(text);
+    }
+    return true;
+  }
+
+  if (cmd === 'search') {
+    s.state = STATES.CT_SEARCH;
+    s.ctMsgId = ctx.messageId;
+    await ctx.edit('🔍 Axtar:\n\nAd və ya telefon nömrəsi yazın.\n\nMəsələn: "Akif" və ya "0501234567"', {
+      reply_markup: { inline_keyboard: [[{ text: '↩️ Geri', callback_data: 'ct:back' }]] },
+    });
+    return true;
+  }
 
   if (cmd === 'open') {
     await openList(chatId, ctx);
@@ -128,7 +197,7 @@ async function handleAction(chatId, action, ctx) {
     if (!contact) { await ctx.edit('❌ Kontakt tapılmadı.'); return true; }
     contactStore.remove(contact.phone);
     await ctx.edit(`🗑 Silindi: ${contact.name}\n📱 ${formatPhone(contact.phone)}\n\n📒 Daxili bazada qalan: ${contactStore.count()}`, {
-      reply_markup: { inline_keyboard: [[{ text: '📒 Kontaktlar', callback_data: 'ct:open' }], [{ text: '↩️ Geri', callback_data: 'ct:back' }]] },
+      reply_markup: { inline_keyboard: [[{ text: '📒 Kontaktlar', callback_data: 'ct:menu' }], [{ text: '↩️ Geri', callback_data: 'ct:back' }]] },
     });
     return true;
   }
@@ -137,7 +206,7 @@ async function handleAction(chatId, action, ctx) {
 }
 
 /**
- * Handle text input while a contact rename / change-number flow is active.
+ * Handle text input while a contact flow is active (rename / number / search).
  * @param {string} chatId
  * @param {string} text
  * @param {object} ctx — { send, edit }
@@ -145,6 +214,26 @@ async function handleAction(chatId, action, ctx) {
 async function handleText(chatId, text, ctx) {
   const s = sessionManager.get(chatId);
   sessionManager.touch(chatId);
+
+  if (s.state === STATES.CT_SEARCH) {
+    const results = contactStore.search(text);
+    s.state = STATES.IDLE;
+    s.ctPhone = null;
+    if (results.length === 0) {
+      await ctx.edit(`🔍 "${text.trim()}" üzrə kontakt tapılmadı.`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔍 Yeni axtarış', callback_data: 'ct:search' }],
+            [{ text: '↩️ Geri', callback_data: 'ct:back' }],
+          ],
+        },
+      });
+      return true;
+    }
+    const { text: listText, keyboard } = buildContactList(results, 0);
+    await ctx.edit(listText, { reply_markup: { inline_keyboard: keyboard } });
+    return true;
+  }
 
   if (s.state === STATES.CT_RENAME) {
     const check = validateName(text);
@@ -158,7 +247,6 @@ async function handleText(chatId, text, ctx) {
     if (!contact) { await ctx.edit('❌ Kontakt tapılmadı.'); return true; }
     contactStore.updateName(contact.phone, check.name);
     const fresh = contactStore.get(s.ctPhone);
-    const old = s.ctPhone;
     s.state = STATES.IDLE;
     s.ctPhone = null;
     await ctx.edit(`✅ Ad yeniləndi:\n\n👤 ${fresh.name}\n📱 ${formatPhone(fresh.phone)}`, {

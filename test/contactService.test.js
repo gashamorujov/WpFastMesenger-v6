@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const wa = require('../modules/whatsappManager');
 const waPresence = require('../modules/waPresence');
 const contactStore = require('../modules/contactStore');
-const { addContact } = require('../modules/contactService');
+const { addContact, syncAllToWhatsApp } = require('../modules/contactService');
 
 test.before(() => {
   contactStore._reset();
@@ -70,4 +70,32 @@ test('addContact — invalid data → failed', async () => {
   wa.getSenderSocket = () => null;
   const res = await addContact({ name: '', phone: '994501234567' });
   assert.equal(res.status, 'failed');
+});
+
+test('syncAllToWhatsApp — database-dəki bütün kontaktlar WhatsApp-a əlavə olunur', async () => {
+  const synced = [];
+  wa.getSenderSocket = () => ({
+    sock: {
+      addOrEditContact: async (jid, action) => { synced.push({ jid, action }); return { status: 200 }; },
+    },
+    phone: '994501234567',
+  });
+
+  const before = contactStore.count();
+  const res = await syncAllToWhatsApp();
+  assert.equal(res.ok, true);
+  assert.equal(res.total, before);
+  assert.equal(res.okCount, before);
+  assert.deepEqual(res.failed, []);
+  assert.ok(synced.some((s) => s.jid === '994773648648@s.whatsapp.net'));
+  assert.ok(synced.some((s) => s.jid === '994501234567@s.whatsapp.net'));
+  assert.ok(synced.every((s) => s.action.fullName));
+});
+
+test('syncAllToWhatsApp — WhatsApp socket yoxdur → ok:false + reason', async () => {
+  wa.getSenderSocket = () => null;
+  const res = await syncAllToWhatsApp();
+  assert.equal(res.ok, false);
+  assert.ok(res.reason);
+  assert.equal(res.okCount, 0);
 });

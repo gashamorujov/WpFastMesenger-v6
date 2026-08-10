@@ -69,4 +69,40 @@ async function addContact(contact) {
   }
 }
 
-module.exports = { addContact };
+
+/**
+ * Database-dəki BÜTÜN kontaktları WhatsApp kontaktlarına əlavə edir.
+ * Mövcud kontakt əlavə etmə mexanizmindən (addOrEditContact) istifadə olunur;
+ * bir kontaktın xətası digərlərini dayandırmaz.
+ *
+ * @returns {Promise<{ok: boolean, reason?: string, total: number, okCount: number, failed: Array<{phone: string, name: string, reason: string}>}>}
+ */
+async function syncAllToWhatsApp() {
+  const contacts = contactStore.list();
+  const sender = wa.getSenderSocket();
+  if (!sender || !sender.sock || typeof sender.sock.addOrEditContact !== 'function') {
+    return {
+      ok: false,
+      reason: 'Aktiv WhatsApp bağlantısı yoxdur və ya kontakt sinxronizasiyası dəstəklənmir',
+      total: contacts.length,
+      okCount: 0,
+      failed: [],
+    };
+  }
+
+  let okCount = 0;
+  const failed = [];
+  for (const c of contacts) {
+    try {
+      const res = await waPresence.addContactToWhatsApp(sender.sock, { name: c.name, phone: c.phone });
+      if (res.ok) okCount++;
+      else failed.push({ phone: c.phone, name: c.name, reason: res.reason || 'Bilinməyən xəta' });
+    } catch (e) {
+      failed.push({ phone: c.phone, name: c.name, reason: e.message || 'Bilinməyən xəta' });
+    }
+  }
+
+  return { ok: true, total: contacts.length, okCount, failed };
+}
+
+module.exports = { addContact, syncAllToWhatsApp };

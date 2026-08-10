@@ -4,14 +4,15 @@ const { buildContactList, buildContactActions, buildContactInfo, CONTACTS_PER_PA
 
 const mk = (i) => ({ name: `Kontakt ${i}`, phone: `99450${String(1234567 + i).padStart(7, '0')}`, waRegistered: null });
 
-test('buildContactList paginates and keeps rows = 5 + nav + back', () => {
+test('buildContactList paginates and keeps rows = 5 + nav + search + back', () => {
   const contacts = Array.from({ length: 17 }, (_, i) => mk(i));
   const p = buildContactList(contacts, 2);
-  assert.equal(p.keyboard.length, 7); // 5 contacts + page nav + back
+  assert.equal(p.keyboard.length, 8); // 5 contacts + page nav + search + back
   assert.match(p.text, /3\/4/);
   const page1 = buildContactList(contacts, 1);
   const toggles = page1.keyboard.flat().filter((b) => b.callback_data.startsWith('ct:view'));
   assert.equal(toggles.length, CONTACTS_PER_PAGE);
+  assert.ok(page1.keyboard.flat().some((b) => b.callback_data === 'ct:search'));
 });
 
 test('buildContactList shows WA badge and empty state', () => {

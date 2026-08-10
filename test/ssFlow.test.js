@@ -99,7 +99,7 @@ test('ss.handle — content message → confirm screen with 🚀 Göndər', asyn
   // Təsdiq mesajı YENİ mesaj kimi ən aşağıda göndərilir (redaktə deyil)
   assert.equal(chat.edited.length, 0);
   const last = chat.sent[chat.sent.length - 1];
-  assert.match(last.text, /Hazırdır/);
+  assert.match(last.text, /Göndəriş Təsdiqi/);
   const labels = last.opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
   assert.ok(labels.includes('🚀 Göndər'));
 });
@@ -205,7 +205,7 @@ test('ss flow — bot prompts are deleted and re-sent below the user message (bo
   assert.ok(deletedMsgs.includes(contentPromptId), 'content prompt deleted');
   assert.equal(chat.edited.length, 0, 'confirm is sent as a new message, not edited in place');
   assert.equal(chat.sent.length, 3);
-  assert.match(chat.sent[2].text, /Hazırdır/);
+  assert.match(chat.sent[2].text, /Göndəriş Təsdiqi/);
 });
 
 test('ss.handle — exact 3-line input (503482690 / 773971757 / 514143432) → 3 separate recipients in the job', async () => {
