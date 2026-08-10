@@ -3,7 +3,7 @@ isolateDataDir('ssflow');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sessionManager } = require('../modules/services');
+const { sessionManager, setTelegramMessenger } = require('../modules/services');
 const { STATES } = require('../modules/sessionManager');
 const jobStore = require('../modules/jobStore');
 const contactStore = require('../modules/contactStore');
@@ -14,17 +14,20 @@ const ss = require('../commands/ss');
 const originalCreateJob = broadcastService.createJob;
 const originalRetryFailed = broadcastService.retryFailed;
 let lastJob = null;
+const deletedMsgs = [];
 
 function fakeChat() {
   const sent = [];
   const edited = [];
+  const deleted = [];
   let id = 0;
   return {
     sent,
     edited,
+    deleted,
     send: async (text, opts) => { id++; sent.push({ text, opts, id }); return { message_id: id }; },
     edit: async (text, opts) => { edited.push({ text, opts }); return true; },
-    deleteMsg: async () => true,
+    deleteMsg: async (cid, mid) => { deleted.push(mid); return true; },
     messageId: 99,
   };
 }
@@ -32,6 +35,10 @@ function fakeChat() {
 test.before(() => {
   jobStore._reset();
   contactStore._reset();
+  setTelegramMessenger({
+    sendText: async () => ({}),
+    deleteMessage: async (chatId, mid) => { deletedMsgs.push(mid); return true; },
+  });
   wa.getSenderSocket = () => ({ sock: { sendMessage: async () => ({}) }, phone: '994501234567' });
   broadcastService.createJob = (input) => {
     lastJob = { ...input, id: 'job-fake' };
@@ -43,14 +50,15 @@ test.before(() => {
 test.after(() => {
   broadcastService.createJob = originalCreateJob;
   broadcastService.retryFailed = originalRetryFailed;
-  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10']) sessionManager.destroy(id);
+  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10', 'c11', 'c12']) sessionManager.destroy(id);
 });
 
 test('ss.start — numbers prompt + SS_NUMBERS state', async () => {
   const chat = fakeChat();
   await ss.start('c1', chat);
   assert.equal(sessionManager.get('c1').state, STATES.SS_NUMBERS);
-  assert.match(chat.sent[0].text, /Nömrələri göndər/);
+  assert.match(chat.sent[0].text, /Nömrələri daxil edin/);
+  assert.match(chat.sent[0].text, /503482690/);
 });
 
 test('ss.handle — manual numbers phase → content phase', async () => {
@@ -88,7 +96,9 @@ test('ss.handle — content message → confirm screen with 🚀 Göndər', asyn
   const s = sessionManager.get('c4');
   assert.equal(s.state, STATES.SS_CONFIRM);
   assert.ok(s.pendingPayload);
-  const last = chat.edited[chat.edited.length - 1];
+  // Təsdiq mesajı YENİ mesaj kimi ən aşağıda göndərilir (redaktə deyil)
+  assert.equal(chat.edited.length, 0);
+  const last = chat.sent[chat.sent.length - 1];
   assert.match(last.text, /Hazırdır/);
   const labels = last.opts.reply_markup.inline_keyboard.flat().map((b) => b.text);
   assert.ok(labels.includes('🚀 Göndər'));
@@ -176,4 +186,39 @@ test('ss.handle — exact user input (994503482690 / +994 51 414 34 32) → both
   await ss.handleAction('c10', 'send', chat);
   assert.equal(lastJob.targets.length, 2);
   assert.deepEqual(lastJob.targets.map((t) => t.phone), ['994503482690', '994514143432']);
+});
+
+test('ss flow — bot prompts are deleted and re-sent below the user message (bottom placement)', async () => {
+  deletedMsgs.length = 0;
+  const chat = fakeChat();
+  await ss.start('c11', chat);
+  const numbersPromptId = chat.sent[0].id;
+
+  // Nömrələr daxil edilir → köhnə sorğu silinir, yeni sorğu aşağıda göndərilir
+  await ss.handle('c11', { text: '503482690\n773971757\n514143432' }, '503482690\n773971757\n514143432', chat, () => ({}));
+  assert.ok(deletedMsgs.includes(numbersPromptId), 'numbers prompt deleted');
+  assert.equal(chat.sent.length, 2);
+  const contentPromptId = chat.sent[1].id;
+
+  // Mesaj yazılır → "Mesajı yaz" sorğusu silinir, təsdiq YENİ mesaj kimi ən aşağıda
+  await ss.handle('c11', { text: 'Salam' }, 'Salam', chat, () => ({ type: 'text', payload: { text: 'Salam' } }));
+  assert.ok(deletedMsgs.includes(contentPromptId), 'content prompt deleted');
+  assert.equal(chat.edited.length, 0, 'confirm is sent as a new message, not edited in place');
+  assert.equal(chat.sent.length, 3);
+  assert.match(chat.sent[2].text, /Hazırdır/);
+});
+
+test('ss.handle — exact 3-line input (503482690 / 773971757 / 514143432) → 3 separate recipients in the job', async () => {
+  const chat = fakeChat();
+  await ss.start('c12', chat);
+  await ss.handle('c12', { text: '503482690\n773971757\n514143432' }, '503482690\n773971757\n514143432', chat, () => ({}));
+  const s = sessionManager.get('c12');
+  assert.equal(s.state, STATES.SS_CONTENT);
+  assert.equal(s.numbers.length, 3);
+  assert.deepEqual(s.numbers.map((n) => n.phone), ['994503482690', '994773971757', '994514143432']);
+
+  await ss.handle('c12', { text: 'Salam' }, 'Salam', chat, () => ({ type: 'text', payload: { text: 'Salam' } }));
+  await ss.handleAction('c12', 'send', chat);
+  assert.equal(lastJob.targets.length, 3);
+  assert.deepEqual(lastJob.targets.map((t) => t.phone), ['994503482690', '994773971757', '994514143432']);
 });

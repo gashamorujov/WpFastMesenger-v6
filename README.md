@@ -64,8 +64,8 @@ curl -sL https://github.com/gashamorujov/WpFastMesenger-v5/raw/main/scripts/depl
 
 ### 📨 `.ss` — Toplu mesaj
 
-1. `.ss` yazın → **📱 Nömrələri göndər**.
-2. Nömrələri istənilən ayırıcı ilə yazın: sətir, vergül, nöqtəli vergül, boşluq — hamısı dəstəklənir. Duplicate-lər və yanlış formatlar avtomatik bildirilir (yalnız Azərbaycan mobil nömrələri).
+1. `.ss` yazın → **📱 Nömrələri daxil edin** (nömrələr alt-alta göstərilir).
+2. Nömrələri **hər sətirə bir nömrə** olmaqla daxil edin — hər sətir ayrıca WhatsApp recipientidir (1, 10, 50, 100+; limit yoxdur). Vergül/boşluq ayırıcıları da dəstəklənir. Hər sətir normalizə olunur (`994XXXXXXXXX`), duplicate-lər atlanır, yanlış sətirlər ayrıca bildirilir (yalnız Azərbaycan mobil nömrələri).
 3. Mesajı göndərin: mətn, şəkil, video, səs, stiker, GIF, fayl, PDF, caption-lı media — format dəyişdirilmir. Bu mərhələdə yenidən nömrə yazsanız siyahıya **əlavə olunur**.
 4. Təsdiq ekranı: **📨 Hazırdır** (nömrələr alt-alta) → **[🚀 Göndər]** tam genişlikdə, altında **[✖️ Geri]**. Göndərmə başlayan kimi eyni mesaj canlı progress olur və tam genişlikdə **🛑 Göndərişi Dayandır** düyməsi görünür (yalnız aktiv göndəriş zamanı).
 5. Göndəriş **persistent job** kimi işləyir (`data/jobs/`):
@@ -78,6 +78,7 @@ curl -sL https://github.com/gashamorujov/WpFastMesenger-v5/raw/main/scripts/depl
    - xəta olan nömrə prosesi dayandırmır; sonda **📨 Yenidən göndər** və **🔁 Uğursuzları təkrar** düymələri;
    - bağlantı kəsilərsə və ya proses yenidən başladılarsa job **avtomatik bərpa olunur** (göndərilmişlər təkrarlanmır);
    - `.cc` və ya **🛑 Dayandır** işi ləğv edir — ləğv edilmiş iş bir daha bərpa olunmur;
+   - botun hər növbəti sorğu mesajı istifadəçinin son mesajından **sonra — ən aşağıda** yaradılır; keçmiş sorğu mesajları avtomatik silinir;
    - əməliyyat bitəndə sorğu/seçim/ara mərhələ bot mesajları avtomatik silinir — yalnız yekun nəticə mesajı qalır;
    - toplu göndəriş zamanı WhatsApp-dan gələn sorğular (cavablar) yadda saxlanılır və göndəriş **tamamilə bitəndən sonra** Telegram çatında ən aşağıda — bizim mesajımızın altında görünür (`WA_FORWARD_INCOMING` ilə söndürmək olar).
 

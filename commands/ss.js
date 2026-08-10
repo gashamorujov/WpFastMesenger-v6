@@ -1,19 +1,21 @@
 /**
- * .ss — toplu mesaj: nömrələr → mesaj → təsdiq → 🚀 Göndər.
+ * .ss — toplu mesaj: nömrələr (alt-alta) → mesaj → təsdiq → 🚀 Göndər.
  *
- * Flow (single evolving bot message — köhnə mesajlar yığılmır):
- *   1. `.ss` → "📱 Nömrələri göndər:"
- *   2. istənilən sayda nömrə (sətir/vergül/boşluq və s. ayırıcılarla) →
- *      normalizə + duplicate sil + yanlışları göstər → "💬 Mesajı yaz:"
+ * Axın:
+ *   1. `.ss` → "📱 Nömrələri daxil edin:" (nömrələr alt-alta göstərilir)
+ *   2. istənilən sayda nömrə — HƏR SƏTR AYRI NÖMRƏDİR (1, 10, 100+).
+ *      Normalizə + duplicate sil + yanlışları göstər → "💬 Mesajı yaz:"
  *   3. mesaj/media → təsdiq ekranı: 📨 Hazırdır + [🚀 Göndər][✖️ Geri]
- *   4. 🚀 Göndər → persistent job başlayır; eyni mesaj canlı progress
- *      olur: 📤 37/100 + [🛑 Dayandır]
- *   5. Tamamlanma/ləğv → eyni mesaj yekun nəticəyə çevrilir
- *      ([🛑 Dayandır] avtomatik silinir)
+ *   4. 🚀 Göndər → persistent job; canlı progress + [🛑 Dayandır]
+ *   5. Tamamlanma/ləğv → yekun nəticə ([🛑 Dayandır] silinir)
  *
- * Real göndərmə: hər nömrə üçün Baileys sendMessage çağırılır; uğur
- * yalnız server qəbul etdikdə (və istəyə görə server ACK gözlənilir)
- * ✅ hesab olunur. Xəta → ❌, heç vaxt saxta "sent" göstərilmir.
+ * Mesaj yerləşməsi: botun hər növbəti sorğu mesajı istifadəçinin SON
+ * mesajından sonra — ən aşağıda — göndərilir. Keçmiş sorğu mesajları
+ * avtomatik silinir (cleanup). Yalnız vacib yekun nəticə saxlanılır.
+ *
+ * Real göndərmə: hər nömrə üçün Baileys sendMessage çağırılır (lib/broadcast);
+ * uğur yalnız WhatsApp client cavabından sonra ✅ hesab olunur. Xəta → ❌,
+ * bir nömrənin xətası digərlərini dayandırmaz.
  */
 const fs = require('fs-extra');
 const { extractNumbers } = require('../lib/phone');
@@ -32,7 +34,13 @@ const { makeLogger } = require('../modules/logger');
 
 const LOG = makeLogger('SS');
 
-const NUMBERS_PROMPT = '📱 Nömrələri göndər:\n\nİstənilən sayda (1, 10, 100+).\nSətir, vergül və ya boşluqla ayırın:\n0501234567, 0551234567, 0771234567…';
+const NUMBERS_PROMPT =
+  '📱 Nömrələri daxil edin:\n\n' +
+  '503482690\n' +
+  '773971757\n' +
+  '514143432\n\n' +
+  'İstənilən sayda (1, 10, 100+).\n' +
+  'Hər sətir ayrıca WhatsApp nömrəsidir.';
 const CONTENT_PROMPT = '💬 Mesajı yaz:\n\nMətn və ya media (şəkil, video, səs, fayl).';
 
 function previewText(built) {
@@ -64,7 +72,11 @@ function previewText(built) {
   }
 }
 
-/** Edit the single evolving flow message; fall back to a new message. */
+/**
+ * Cari flow mesajını (s.ssMsgId) redaktə edir; uğursuz olsa yenisini
+ * göndərir. Yalnız təsdiq mesajının canlı progressə çevrilməsi üçün istifadə
+ * olunur — həmin mesaj artıq ən aşağıdadır.
+ */
 async function editFlow(chatId, ctx, text, keyboard) {
   const s = sessionManager.get(chatId);
   const opts = keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {};
@@ -77,7 +89,26 @@ async function editFlow(chatId, ctx, text, keyboard) {
     }
   }
   const sent = await ctx.send(text, opts);
-  if (sent?.message_id) s.ssMsgId = sent.message_id;
+  if (sent?.message_id) {
+    s.ssMsgId = sent.message_id;
+    cleanup.track(chatId, sent.message_id);
+  }
+  return true;
+}
+
+/**
+ * Köhnə sorğu mesajlarını silir və YENİ sorğunu ən aşağıda — istifadəçinin
+ * son mesajından SONRA — göndərir. Yeni mesaj izlənilir ki, növbəti mərhələdə
+ * silinsin (yalnız yekun nəticə qalır).
+ */
+async function sendFlowMessage(chatId, ctx, text, keyboard) {
+  await cleanup.deleteTracked(chatId);
+  const sent = await ctx.send(text, keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {});
+  const s = sessionManager.get(chatId);
+  if (sent?.message_id) {
+    s.ssMsgId = sent.message_id;
+    cleanup.track(chatId, sent.message_id);
+  }
   return true;
 }
 
@@ -94,7 +125,7 @@ async function start(chatId, ctx) {
   s.numbers = [];
   s.pendingPayload = null;
   sessionManager.touch(chatId);
-  await editFlow(chatId, ctx, NUMBERS_PROMPT);
+  await sendFlowMessage(chatId, ctx, NUMBERS_PROMPT);
 }
 
 /**
@@ -138,7 +169,9 @@ async function showConfirm(chatId, ctx) {
     `👥 ${s.numbers.length} nömrə:\n\n` +
     `${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n` +
     `💬 ${previewText(built)}`;
-  await editFlow(chatId, ctx, text, SS_CONFIRM_BUTTONS);
+  // Köhnə "Mesajı yaz" sorğusu silinir, təsdiq mesajı istifadəçinin
+  // mesajından SONRA ən aşağıda yaradılır
+  await sendFlowMessage(chatId, ctx, text, SS_CONFIRM_BUTTONS);
 }
 
 /**
@@ -154,11 +187,11 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
   if (s.state !== STATES.SS_NUMBERS && s.state !== STATES.SS_CONTENT) return false;
   sessionManager.touch(chatId);
 
-  // ── Numbers phase ──
+  // ── Nömrələr mərhələsi ──
   if (s.state === STATES.SS_NUMBERS) {
     const { numbers, duplicates, invalid } = extractNumbers(text);
     if (numbers.length === 0) {
-      await editFlow(chatId, ctx, `❌ Nömrə tapılmadı.\n\n${NUMBERS_PROMPT}`);
+      await sendFlowMessage(chatId, ctx, `❌ Nömrə tapılmadı.\n\n${NUMBERS_PROMPT}`);
       return true;
     }
 
@@ -168,11 +201,11 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
 
     const recent = fresh.filter((n) => recentSends.isRecent(n));
     s.state = STATES.SS_CONTENT;
-    await editFlow(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
+    await sendFlowMessage(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
     return true;
   }
 
-  // ── Content phase: more numbers can still be appended ──
+  // ── Məzmun mərhələsi: daha çox nömrə əlavə oluna bilər ──
   if (text && isNumbersOnly(text)) {
     const { numbers, duplicates, invalid } = extractNumbers(text);
     const existing = new Set(s.numbers.map((n) => n.phone));
@@ -180,15 +213,15 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
     for (const n of fresh) s.numbers.push({ phone: n, name: null });
     const recent = fresh.filter((n) => recentSends.isRecent(n));
     if (fresh.length === 0) {
-      await editFlow(chatId, ctx, `🔁 Yeni nömrə əlavə olunmadı (hamısı mövcuddur).\n\n👥 ${s.numbers.length} nömrə:\n\n${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n${CONTENT_PROMPT}`);
+      await sendFlowMessage(chatId, ctx, `🔁 Yeni nömrə əlavə olunmadı (hamısı mövcuddur).\n\n👥 ${s.numbers.length} nömrə:\n\n${numberLines(s.numbers.map((n) => n.phone)).join('\n')}\n\n${CONTENT_PROMPT}`);
     } else {
-      await editFlow(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
+      await sendFlowMessage(chatId, ctx, numbersReport(s.numbers.map((n) => n.phone), duplicates, invalid, recent));
     }
     return true;
   }
 
   if (s.numbers.length === 0) {
-    await editFlow(chatId, ctx, `❌ Nömrə yoxdur. Yenidən .ss yazın.`, MENU_BUTTON);
+    await sendFlowMessage(chatId, ctx, `❌ Nömrə yoxdur. Yenidən .ss yazın.`, MENU_BUTTON);
     sessionManager.reset(chatId);
     return true;
   }
@@ -196,20 +229,20 @@ async function handle(chatId, msg, text, ctx, buildPayload) {
   // Build payload from the received message (format preserved)
   const built = await buildPayload(msg);
   if (!built.payload) {
-    await editFlow(chatId, ctx, `❌ ${built.reason || 'Bu mesaj növü dəstəklənmir.'}`, MENU_BUTTON);
+    await sendFlowMessage(chatId, ctx, `❌ ${built.reason || 'Bu mesaj növü dəstəklənmir.'}`, MENU_BUTTON);
     return true;
   }
 
   const sender = wa.getSenderSocket();
   if (!sender || !sender.sock) {
-    await editFlow(chatId, ctx, '❌ Aktiv WhatsApp bağlantısı yoxdur. Əvvəlcə 📲 Qoşul ilə qoşulun.', MENU_BUTTON);
+    await sendFlowMessage(chatId, ctx, '❌ Aktiv WhatsApp bağlantısı yoxdur. Əvvəlcə 📲 Qoşul ilə qoşulun.', MENU_BUTTON);
     if (built.tempFile) {
       try { fs.removeSync(built.tempFile); } catch {}
     }
     return true;
   }
 
-  // Hold the payload until the user confirms (🚀 Göndər / ✖️ Geri)
+  // Payload təsdiqə qədər saxlanılır (🚀 Göndər / ✖️ Geri)
   s.pendingPayload = { built, spec: specFromBuilt(built) };
   s.contentCount++;
   s.state = STATES.SS_CONFIRM;
@@ -243,7 +276,7 @@ async function handleAction(chatId, action, ctx) {
     s.pendingPayload = null;
     s.state = STATES.IDLE;
 
-    // The confirm message becomes the live progress message (same id)
+    // Təsdiq mesajı canlı progress mesajına çevrilir (eyni id — ən aşağıda)
     const progressMsgId = s.ssMsgId || ctx.messageId || null;
 
     const job = broadcastService.createJob({
@@ -255,7 +288,7 @@ async function handleAction(chatId, action, ctx) {
       tempFile: built.tempFile || null,
     });
     if (!job) {
-      await editFlow(chatId, ctx, '❌ Job yaradılmadı.', MENU_BUTTON);
+      await sendFlowMessage(chatId, ctx, '❌ Job yaradılmadı.', MENU_BUTTON);
       return true;
     }
     s.jobId = job.id;
@@ -269,7 +302,7 @@ async function handleAction(chatId, action, ctx) {
   if (cmd === 'back') {
     cleanupPending(s);
     s.state = STATES.SS_CONTENT;
-    await editFlow(chatId, ctx, `✖️ Geri qayıtdınız.\n\n👥 ${s.numbers.length} nömrə\n\n${CONTENT_PROMPT}`);
+    await sendFlowMessage(chatId, ctx, `✖️ Geri qayıtdınız.\n\n👥 ${s.numbers.length} nömrə\n\n${CONTENT_PROMPT}`);
     return true;
   }
 
@@ -285,15 +318,15 @@ async function handleAction(chatId, action, ctx) {
     const jobId = payload;
     const old = require('../modules/jobStore').read(jobId);
     if (!old || String(old.chatId) !== String(chatId)) {
-      await editFlow(chatId, ctx, '❌ İş tapılmadı və ya artıq silinib.', MENU_BUTTON);
+      await sendFlowMessage(chatId, ctx, '❌ İş tapılmadı və ya artıq silinib.', MENU_BUTTON);
       return true;
     }
-    // Send a fresh progress message with a live stop button, then enqueue
-    const sent = await ctx.send('📤 Yenidən göndərilir…', { reply_markup: { inline_keyboard: SS_STOP_BUTTONS } });
-    const progressMsgId = sent?.message_id || null;
+    // Fresh progress message with a live stop button, then enqueue
+    await sendFlowMessage(chatId, ctx, '📤 Yenidən göndərilir…', SS_STOP_BUTTONS);
+    const progressMsgId = s.ssMsgId || null;
     const newJob = broadcastService.retryFailed(jobId, progressMsgId);
     if (!newJob) {
-      await editFlow(chatId, ctx, '❌ Yenidən cəhd üçün xəta olan nömrə yoxdur.', MENU_BUTTON);
+      await sendFlowMessage(chatId, ctx, '❌ Yenidən cəhd üçün xəta olan nömrə yoxdur.', MENU_BUTTON);
       return true;
     }
     s.jobId = newJob.id;
@@ -305,7 +338,7 @@ async function handleAction(chatId, action, ctx) {
     const jobId = payload;
     const old = require('../modules/jobStore').read(jobId);
     if (!old || String(old.chatId) !== String(chatId) || old.targets.length === 0) {
-      await editFlow(chatId, ctx, '❌ İş tapılmadı və ya artıq silinib.', MENU_BUTTON);
+      await sendFlowMessage(chatId, ctx, '❌ İş tapılmadı və ya artıq silinib.', MENU_BUTTON);
       return true;
     }
     // Reuse the previous target list for a brand-new message
@@ -314,7 +347,7 @@ async function handleAction(chatId, action, ctx) {
     fresh.state = STATES.SS_CONTENT;
     fresh.numbers = old.targets.map((t) => ({ phone: t.phone, name: t.name }));
     sessionManager.touch(chatId);
-    await editFlow(chatId, ctx, `👥 ${fresh.numbers.length} nömrə
+    await sendFlowMessage(chatId, ctx, `👥 ${fresh.numbers.length} nömrə
 
 💬 Yeni mesajı yaz (mətn və ya media):`);
     return true;

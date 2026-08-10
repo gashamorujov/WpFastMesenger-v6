@@ -198,3 +198,44 @@ test('broadcast — ackTimeout leaves delivered at 0 but success counts', async 
   assert.equal(report.success, 1);
   assert.equal(report.delivered, 0);
 });
+
+test('broadcast — 100 targets, no artificial limit, all sent sequentially', async () => {
+  const sock = makeSock();
+  const phones = Array.from({ length: 100 }, (_, i) => `99450${String(1000000 + i).slice(1)}`);
+  const report = await broadcast(sock, targets(phones), { text: 'hi' }, { delayMinMs: 0, delayMaxMs: 1 });
+  assert.equal(report.success, 100);
+  assert.equal(report.fail, 0);
+  assert.equal(sock.calls.length, 100);
+  assert.equal(sock.calls[0].jid, `99450${String(1000000).slice(1)}@s.whatsapp.net`);
+  assert.equal(sock.calls[99].jid, `99450${String(1000099).slice(1)}@s.whatsapp.net`);
+});
+
+test('broadcast — 3-line user input style sends each line separately', async () => {
+  const sock = makeSock();
+  const report = await broadcast(sock, targets(['994503482690', '994773971757', '994514143432']), { text: 'Salam' }, { delayMinMs: 1, delayMaxMs: 1 });
+  assert.equal(report.success, 3);
+  assert.deepEqual(sock.calls.map((c) => c.jid), [
+    '994503482690@s.whatsapp.net',
+    '994773971757@s.whatsapp.net',
+    '994514143432@s.whatsapp.net',
+  ]);
+});
+
+test('broadcast — unknown socket state: 3 consecutive connection errors interrupt (resume-safe)', async () => {
+  const sock = makeSock({
+    connectionLost: new Set([jidForPhone('994551234567'), jidForPhone('994701234567'), jidForPhone('994771234567')]),
+  });
+  // ws mövcud deyil → vəziyyət 'unknown'; ardıcıl bağlantı xətası limiti işə düşür
+  const report = await broadcast(
+    sock,
+    targets(['994501234567', '994551234567', '994701234567', '994771234567', '994781234567']),
+    { text: 'hi' },
+    { delayMinMs: 1, delayMaxMs: 1, maxRetries: 0 }
+  );
+  assert.equal(report.interrupted, true);
+  assert.equal(report.success, 1);
+  assert.equal(report.fail, 3);
+  // 5-ci nömrəyə cəhd edilmir — 3 ardıcıl bağlantı xətası loop-u dayandırdı
+  assert.equal(sock.calls.length, 4);
+  assert.equal(report.failed.length, 3);
+});
